@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { age, matches, NO_FILTERS, SEASONS, type Data, type Filters, type Internship, type Tracked } from "@/lib/internships";
+import { age, matches, NO_FILTERS, searchElsewhere, SEASONS, type Data, type Filters, type Internship, type Tracked } from "@/lib/internships";
 
 const PAGE = 50;
 const STORAGE_KEY = "internship-finder:tracked";
@@ -177,9 +177,26 @@ export default function Finder() {
         </div>
       </section>
 
-      <p aria-live="polite" className="text-sm text-slate-600 dark:text-slate-300">
-        {results.length.toLocaleString()} internship{results.length === 1 ? "" : "s"}, newest first
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600 dark:text-slate-300">
+        <p aria-live="polite">
+          {results.length.toLocaleString()} internship{results.length === 1 ? "" : "s"}, newest first
+        </p>
+        <p className="flex flex-wrap items-center gap-2">
+          Search this on
+          {searchElsewhere(filters).map((site) => (
+            <a
+              key={site.name}
+              href={site.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Search this on ${site.name} (opens in a new tab)`}
+              className="rounded-lg bg-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-800 transition hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+            >
+              {site.name} ↗
+            </a>
+          ))}
+        </p>
+      </div>
 
       <ul className="space-y-3">
         {results.slice(0, shown).map((item) => (
@@ -202,7 +219,7 @@ export default function Finder() {
 
       <footer className="pt-6 text-center text-xs text-slate-600 dark:text-slate-300">
         <p>Updated {new Date(data.updated * 1000).toLocaleDateString(undefined, { dateStyle: "medium" })} from {data.sources.filter((s) => s.ok || s.count).map((s) => s.name).join(", ")}.</p>
-        <p className="mt-1">Not every internship is here: coverage is strongest for tech roles in the U.S. Always confirm details on the company&apos;s own page.</p>
+        <p className="mt-1">Not every internship is here: coverage is strongest for tech roles in the U.S., so try LinkedIn and Simplify too. Always confirm details on the company&apos;s own page.</p>
       </footer>
     </div>
   );

@@ -51,6 +51,22 @@ export function matches(item: Internship, f: Filters, tracked: Tracked): boolean
   return true;
 }
 
+/**
+ * The student's current search on sites whose listings can't be gathered here. LinkedIn forbids automated
+ * access, so these are plain links that the student opens themselves.
+ */
+export function searchElsewhere(f: Filters): { name: string; url: string }[] {
+  const keywords = f.query.trim() || f.field;
+  const linkedin = new URLSearchParams({ keywords: keywords || "internship", f_E: "1" });  // f_E=1: internships
+  if (f.location.trim()) linkedin.set("location", f.location.trim());
+  if (f.remote) linkedin.set("f_WT", "2");  // f_WT=2: remote
+  const simplify = new URLSearchParams({ query: `${keywords} internship`.trim() });
+  return [
+    { name: "LinkedIn", url: `https://www.linkedin.com/jobs/search/?${linkedin}` },
+    { name: "Simplify", url: `https://simplify.jobs/jobs?${simplify}` },
+  ];
+}
+
 /** "today", "3d ago", "2mo ago": how long before the data's last update a listing was posted. */
 export function age(posted: number | null, updated: number): string {
   if (!posted) return "";

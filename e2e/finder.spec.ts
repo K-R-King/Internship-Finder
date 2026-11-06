@@ -80,6 +80,20 @@ test("apply links go to the listing, in a new tab", async ({ page }) => {
   await expect(link).toHaveAttribute("target", "_blank");
 });
 
+test("LinkedIn and Simplify links carry the current search", async ({ page }) => {
+  await open(page);
+  await page.getByLabel("Search by company or role").fill("data analyst");
+  await page.getByLabel("Location").fill("Boston");
+  await page.getByLabel("Remote").check();
+
+  const linkedin = new URL((await page.getByRole("link", { name: /on LinkedIn/ }).getAttribute("href"))!);
+  expect(linkedin.origin).toBe("https://www.linkedin.com");
+  expect(Object.fromEntries(linkedin.searchParams)).toEqual({ keywords: "data analyst", f_E: "1", location: "Boston", f_WT: "2" });
+
+  const simplify = new URL((await page.getByRole("link", { name: /on Simplify/ }).getAttribute("href"))!);
+  expect(simplify.searchParams.get("query")).toBe("data analyst internship");
+});
+
 test("says so when the data can't load", async ({ page }) => {
   await page.route("**/internships.json", (route) => route.fulfill({ status: 500 }));
   await page.goto("/");

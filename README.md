@@ -17,7 +17,7 @@ Open internships for university students, gathered from company job boards and s
 | [Summer Internships list](https://github.com/vanshb03/Summer2027-Internships) | Community-maintained, mostly tech |
 | Greenhouse, Lever and Ashby | The public job boards of the companies in [`data/boards.json`](data/boards.json) |
 
-This isn't every internship: no public source has them all, and sites like LinkedIn and Handshake don't offer one. Coverage is strongest for tech roles in the U.S. To cover more, add companies to `data/boards.json`. The key is the company's name in its job board address, such as `stripe` in `boards.greenhouse.io/stripe`.
+This isn't every internship: no public source has them all. LinkedIn forbids automated access and Handshake needs a login, so their listings aren't gathered; instead, buttons open the student's current search on LinkedIn and Simplify. Coverage is strongest for tech roles in the U.S. To cover more, add companies to `data/boards.json`. The key is the company's name in its job board address, such as `stripe` in `boards.greenhouse.io/stripe`.
 
 ## Running locally
 
