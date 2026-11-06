@@ -53,13 +53,33 @@ const STATES: Record<string, string> = {
   VT: "Vermont", VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming",
 };
 
-/** Two letters mean a state or a code like UK, so "CA" finds California but not Chicago or Canada. */
+// Sources write big cities differently ("LA", "Los Angeles", "NYC", "New York, NY"), so any of the names
+// finds all of them, with the cities around them. "LA" also means Louisiana, which stays included.
+const SF = "\\bSF\\b|San Francisco";
+const AREAS: { names: string[]; places: RegExp }[] = [
+  {
+    names: ["la", "los angeles"],
+    places: /\bLA\b|Louisiana|Los Angeles|Santa Monica|Culver City|El Segundo|Hawthorne|Burbank|Pasadena|Long Beach|Torrance|Playa Vista/,
+  },
+  { names: ["sf", "san francisco"], places: new RegExp(SF) },
+  {
+    names: ["bay area"],
+    places: new RegExp(`${SF}|Bay Area|San Jose|Palo Alto|Santa Clara|Sunnyvale|Mountain View|Oakland|Berkeley|Fremont|Redwood City|San Mateo|Menlo Park|Cupertino`),
+  },
+  { names: ["ny", "nyc", "new york", "new york city"], places: /\bNY\b|\bNYC\b|New York|Brooklyn|Manhattan/ },
+  { names: ["dc", "washington dc", "washington d.c."], places: /\bDC\b|D\.C\.|District of Columbia/ },
+];
+
+/** Big cities go by any of their names, and other pairs of letters mean a state or a code like UK, so "CA" finds California but not Chicago or Canada. */
 export function inPlace(location: string, query: string): boolean {
   const q = query.trim();
+  const area = AREAS.find((a) => a.names.includes(q.toLowerCase()));
+  if (area) return area.places.test(location);
   if (!/^[a-z]{2}$/i.test(q)) return has(location, q);
   const code = q.toUpperCase();
+  // listings written just "SF" or "LA" never say California; "Baton Rouge, LA" isn't either
+  if (code === "CA" && /^LA$|\bSF\b/.test(location.trim())) return true;
   if (new RegExp(`\\b${code}\\b`).test(location)) return true;
-  if (code === "NY" && location.includes("NYC")) return true;
   return STATES[code] !== undefined && has(location, STATES[code]);
 }
 
