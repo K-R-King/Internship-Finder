@@ -73,6 +73,33 @@ test("saved and applied listings survive a refresh", async ({ page }) => {
   await expect(rows(page)).toContainText("Globex");
 });
 
+test("an applied listing stays after it closes", async ({ page }) => {
+  await open(page);
+  await page.getByRole("button", { name: "Applied Accounting Intern at Globex" }).click();
+
+  await page.unroute("**/internships.json");
+  await page.route("**/internships.json", (route) => route.fulfill({ json: { ...DATA, items: DATA.items.filter((i) => i.id !== "b") } }));
+  await page.reload();
+  await page.getByRole("button", { name: "Applied (1)" }).click();
+  await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page)).toContainText("No longer listed");
+});
+
+test("damaged saved data doesn't break the page", async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => localStorage.setItem("internship-finder:tracked", "null"));
+  await page.reload();
+  await expect(page.getByText("64 internships, newest first")).toBeVisible();
+});
+
+test("two letters search for a state", async ({ page }) => {
+  await open(page);
+  await page.getByLabel("Location").fill("TX");
+  await expect(page.getByText("62 internships, newest first")).toBeVisible();
+  await page.getByLabel("Location").fill("ON");
+  await expect(page.getByText("Nothing matches those filters")).toBeVisible();
+});
+
 test("apply links go to the listing, in a new tab", async ({ page }) => {
   await open(page);
   const link = page.getByRole("link", { name: /Apply to Software Intern at Acme/ });

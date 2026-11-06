@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { age, matches, NO_FILTERS, searchElsewhere, SEASONS, type Data, type Filters, type Internship, type Tracked } from "@/lib/internships";
+import { age, matches, NO_FILTERS, readTracked, searchElsewhere, SEASONS, type Data, type Filters, type Internship, type Status, type Tracked } from "@/lib/internships";
 
 const PAGE = 50;
 const STORAGE_KEY = "internship-finder:tracked";
@@ -18,9 +18,9 @@ const CHECKS: { id: "undergrad" | "remote" | "sponsorship"; label: string }[] = 
   { id: "sponsorship", label: "May sponsor visas" },
 ];
 
-function loadTracked(): Tracked {
+function loadTracked(items: Internship[]): Tracked {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
+    return readTracked(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}"), items);
   } catch {
     return {};
   }
@@ -36,19 +36,20 @@ function saveTracked(tracked: Tracked) {
 
 const field = "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900";
 
-function Row({ item, status, updated, onTrack }: {
+function Row({ item, status, closed, updated, onTrack }: {
   item: Internship;
-  status?: Tracked[string];
+  status?: Status;
+  closed: boolean;  // tracked, but no longer in the listings
   updated: number;
-  onTrack: (id: string, status: Tracked[string]) => void;
+  onTrack: (item: Internship, status: Status) => void;
 }) {
   const places = item.locations.slice(0, 3).join(" · ") + (item.locations.length > 3 ? ` +${item.locations.length - 3} more` : "");
-  const toggle = (next: Tracked[string], label: string) => (
+  const toggle = (next: Status, label: string) => (
     <button
       type="button"
       aria-pressed={status === next}
       aria-label={`${label} ${item.title} at ${item.company}`}
-      onClick={() => onTrack(item.id, next)}
+      onClick={() => onTrack(item, next)}
       className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
         status === next ? "bg-berkeley text-white dark:bg-gold dark:text-berkeley" : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
       }`}
@@ -67,6 +68,7 @@ function Row({ item, status, updated, onTrack }: {
         </p>
         <div className="mt-2 flex flex-wrap gap-1.5 text-xs font-medium">
           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-700 dark:bg-slate-800 dark:text-slate-200">{item.field}</span>
+          {closed && <span className="rounded-full bg-red-100 px-2 py-0.5 text-red-800 dark:bg-red-950 dark:text-red-200">No longer listed</span>}
           {item.gradOnly && <span className="rounded-full bg-violet-100 px-2 py-0.5 text-violet-800 dark:bg-violet-950 dark:text-violet-200">Grad students</span>}
           {item.sponsorship === "offers" && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">Sponsors visas</span>}
           {item.sponsorship === "none" && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-900 dark:bg-amber-950 dark:text-amber-200">No sponsorship</span>}
@@ -98,23 +100,28 @@ export default function Finder() {
   const [shown, setShown] = useState(PAGE);
 
   useEffect(() => {
-    Promise.resolve().then(() => setTracked(loadTracked()));
     fetch("/internships.json")
       .then((res) => {
         if (!res.ok) throw new Error(`internships.json: ${res.status}`);
         return res.json();
       })
-      .then(setData)
+      .then((loaded: Data) => {
+        setData(loaded);
+        setTracked(loadTracked(loaded.items));
+      })
       .catch((err) => {
         console.error(err);
         setFailed(true);
       });
   }, []);
 
-  const results = useMemo(
-    () => (data?.items ?? []).filter((item) => matches(item, filters, tracked)),
-    [data, filters, tracked],
-  );
+  const results = useMemo(() => {
+    const pool = filters.view === "all"
+      ? data?.items ?? []
+      : Object.values(tracked).filter((t) => t.status === filters.view).map((t) => t.item);
+    return pool.filter((item) => matches(item, filters));
+  }, [data, filters, tracked]);
+  const open = useMemo(() => new Set((data?.items ?? []).map((i) => i.url)), [data]);
   const fields = useMemo(() => [...new Set((data?.items ?? []).map((i) => i.field))].sort(), [data]);
 
   function change(next: Partial<Filters>) {
@@ -122,10 +129,10 @@ export default function Finder() {
     setShown(PAGE);
   }
 
-  function track(id: string, status: Tracked[string]) {
+  function track(item: Internship, status: Status) {
     const next = { ...tracked };
-    if (next[id] === status) delete next[id];
-    else next[id] = status;
+    if (next[item.url]?.status === status) delete next[item.url];
+    else next[item.url] = { status, item };
     setTracked(next);
     saveTracked(next);
   }
@@ -135,7 +142,7 @@ export default function Finder() {
   }
   if (!data) return <p className="p-10 text-center text-slate-600 dark:text-slate-300">Loading internships…</p>;
 
-  const count = (view: Filters["view"]) => (view === "all" ? data.items.length : Object.values(tracked).filter((s) => s === view).length);
+  const count = (view: Filters["view"]) => (view === "all" ? data.items.length : Object.values(tracked).filter((t) => t.status === view).length);
 
   return (
     <div className="space-y-5">
@@ -200,7 +207,7 @@ export default function Finder() {
 
       <ul className="space-y-3">
         {results.slice(0, shown).map((item) => (
-          <Row key={item.id} item={item} status={tracked[item.id]} updated={data.updated} onTrack={track} />
+          <Row key={item.id} item={item} status={tracked[item.url]?.status} closed={!open.has(item.url)} updated={data.updated} onTrack={track} />
         ))}
       </ul>
 

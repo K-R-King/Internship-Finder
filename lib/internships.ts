@@ -18,7 +18,10 @@ export interface Data {
   items: Internship[];
 }
 
-export type Tracked = Record<string, "saved" | "applied">;
+export type Status = "saved" | "applied";
+
+/** Keyed by listing page, with a copy of the listing so it stays here after it closes. */
+export type Tracked = Record<string, { status: Status; item: Internship }>;
 
 export interface Filters {
   query: string;
@@ -39,16 +42,52 @@ export const SEASONS = ["Summer", "Fall", "Winter", "Spring"];
 
 const has = (text: string, part: string) => text.toLowerCase().includes(part.trim().toLowerCase());
 
-export function matches(item: Internship, f: Filters, tracked: Tracked): boolean {
-  if (f.view !== "all" && tracked[item.id] !== f.view) return false;
-  if (f.query.trim() && !has(`${item.company} ${item.title}`, f.query)) return false;
-  if (f.location.trim() && !item.locations.some((l) => has(l, f.location))) return false;
+const STATES: Record<string, string> = {
+  AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California", CO: "Colorado", CT: "Connecticut",
+  DE: "Delaware", DC: "District of Columbia", FL: "Florida", GA: "Georgia", HI: "Hawaii", ID: "Idaho", IL: "Illinois",
+  IN: "Indiana", IA: "Iowa", KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland",
+  MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi", MO: "Missouri", MT: "Montana",
+  NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey", NM: "New Mexico", NY: "New York",
+  NC: "North Carolina", ND: "North Dakota", OH: "Ohio", OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania",
+  RI: "Rhode Island", SC: "South Carolina", SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah",
+  VT: "Vermont", VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming",
+};
+
+/** Two letters mean a state or a code like UK, so "CA" finds California but not Chicago or Canada. */
+export function inPlace(location: string, query: string): boolean {
+  const q = query.trim();
+  if (!/^[a-z]{2}$/i.test(q)) return has(location, q);
+  const code = q.toUpperCase();
+  if (new RegExp(`\\b${code}\\b`).test(location)) return true;
+  if (code === "NY" && location.includes("NYC")) return true;
+  return STATES[code] !== undefined && has(location, STATES[code]);
+}
+
+export function matches(item: Internship, f: Filters): boolean {
+  const text = `${item.company} ${item.title}`;
+  if (!f.query.trim().split(/\s+/).every((word) => has(text, word))) return false;
+  if (f.location.trim() && !item.locations.some((l) => inPlace(l, f.location))) return false;
   if (f.field && item.field !== f.field) return false;
   if (f.season && !item.terms.some((t) => t.startsWith(f.season))) return false;
   if (f.undergrad && item.gradOnly) return false;
   if (f.remote && !item.locations.some((l) => has(l, "remote"))) return false;
   if (f.sponsorship && item.sponsorship && item.sponsorship !== "offers") return false;
   return true;
+}
+
+/** What a browser saved. Anything damaged is dropped, and entries from before listings were copied get their copy. */
+export function readTracked(saved: unknown, items: Internship[]): Tracked {
+  if (typeof saved !== "object" || saved === null || Array.isArray(saved)) return {};
+  const tracked: Tracked = {};
+  for (const [key, value] of Object.entries(saved)) {
+    if (value === "saved" || value === "applied") {
+      const item = items.find((i) => i.id === key);
+      if (item) tracked[item.url] = { status: value, item };
+    } else if ((value?.status === "saved" || value?.status === "applied") && value.item?.url === key) {
+      tracked[key] = value;
+    }
+  }
+  return tracked;
 }
 
 /**

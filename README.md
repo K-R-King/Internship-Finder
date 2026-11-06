@@ -4,9 +4,9 @@ Open internships for university students, gathered from company job boards and s
 
 ## Features
 
-- **One list from many sources**, with the same role from different sources merged and ended terms left out.
+- **One list from many sources**, with the same posting from different sources merged, and ended terms and long-abandoned listings left out.
 - **Search and filters:** company or role, location, field, season, open to undergrads, remote, and visa sponsorship.
-- **Saved and Applied tracking**, stored in your browser.
+- **Saved and Applied tracking**, stored in your browser. Tracked listings stay after they close, marked "No longer listed".
 - Light and dark mode, and a layout that works on phones.
 
 ## Where the listings come from
