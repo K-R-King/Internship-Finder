@@ -85,6 +85,14 @@ test("an applied listing stays after it closes", async ({ page }) => {
   await expect(rows(page)).toContainText("No longer listed");
 });
 
+test("an empty Saved list says so", async ({ page }) => {
+  await open(page);
+  await page.getByRole("button", { name: "Saved (0)" }).click();
+  await expect(page.getByText("Nothing saved yet")).toBeVisible();
+  await page.getByRole("button", { name: "See all internships" }).click();
+  await expect(page.getByText("64 internships, newest first")).toBeVisible();
+});
+
 test("damaged saved data doesn't break the page", async ({ page }) => {
   await open(page);
   await page.evaluate(() => localStorage.setItem("internship-finder:tracked", "null"));
@@ -148,7 +156,7 @@ test("LinkedIn and Simplify links carry the current search", async ({ page }) =>
   expect(Object.fromEntries(linkedin.searchParams)).toEqual({ keywords: "data analyst", f_E: "1", location: "Boston", f_WT: "2" });
 
   const simplify = new URL((await page.getByRole("link", { name: /on Simplify/ }).getAttribute("href"))!);
-  expect(simplify.searchParams.get("query")).toBe("data analyst internship");
+  expect(simplify.searchParams.get("q")).toBe("data analyst internship");
 });
 
 test("says so when the data can't load", async ({ page }) => {

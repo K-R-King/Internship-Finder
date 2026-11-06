@@ -202,6 +202,12 @@ describe("readTracked", () => {
     expect(readTracked(saved, [])).toEqual(saved);
   });
 
+  it("follows a listing whose link changed", () => {
+    const moved = { ...item, url: "https://acme.com/direct" };
+    const saved = { [item.url]: { status: "applied", item } };
+    expect(readTracked(saved, [moved])).toEqual({ [moved.url]: { status: "applied", item: moved } });
+  });
+
   it("upgrades entries saved before listings were copied", () => {
     expect(readTracked({ "Simplify:a": "saved", "Simplify:gone": "applied" }, [item])).toEqual({ [item.url]: { status: "saved", item } });
   });

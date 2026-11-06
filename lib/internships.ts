@@ -120,7 +120,9 @@ export function readTracked(saved: unknown, items: Internship[]): Tracked {
       const item = items.find((i) => i.id === key);
       if (item) tracked[item.url] = { status: value, item };
     } else if ((value?.status === "saved" || value?.status === "applied") && value.item?.url === key) {
-      tracked[key] = value;
+      // a listing's link can change, so use the current copy when it's still here
+      const current = items.find((i) => i.url === key || i.id === value.item.id) ?? value.item;
+      tracked[current.url] = { status: value.status, item: current };
     }
   }
   return tracked;
@@ -135,7 +137,7 @@ export function searchElsewhere(f: Filters): { name: string; url: string }[] {
   const linkedin = new URLSearchParams({ keywords: keywords || "internship", f_E: "1" });  // f_E=1: internships
   if (f.location.trim()) linkedin.set("location", f.location.trim());
   if (f.remote) linkedin.set("f_WT", "2");  // f_WT=2: remote
-  const simplify = new URLSearchParams({ query: `${keywords} internship`.trim() });
+  const simplify = new URLSearchParams({ q: `${keywords} internship`.trim() });
   return [
     { name: "LinkedIn", url: `https://www.linkedin.com/jobs/search/?${linkedin}` },
     { name: "Simplify", url: `https://simplify.jobs/jobs?${simplify}` },

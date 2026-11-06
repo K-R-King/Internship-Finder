@@ -243,8 +243,14 @@ export default function Finder() {
 
       {results.length === 0 && (
         <div className="rounded-2xl bg-white p-10 text-center ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700">
-          <p className="font-semibold">Nothing matches those filters</p>
-          <button type="button" onClick={() => change(NO_FILTERS)} className="mt-3 rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-berkeley">Clear filters</button>
+          <p className="font-semibold">
+            {filters.view !== "all" && count(filters.view) === 0
+              ? `Nothing ${filters.view === "saved" ? "saved" : "marked as applied"} yet`
+              : "Nothing matches those filters"}
+          </p>
+          <button type="button" onClick={() => change(NO_FILTERS)} className="mt-3 rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-berkeley">
+            {filters.view !== "all" && count(filters.view) === 0 ? "See all internships" : "Clear filters"}
+          </button>
         </div>
       )}
 
