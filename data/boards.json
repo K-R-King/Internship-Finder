@@ -1,0 +1,18 @@
+{
+  "greenhouse": {
+    "stripe": "Stripe", "databricks": "Databricks", "coinbase": "Coinbase", "robinhood": "Robinhood", "figma": "Figma",
+    "lyft": "Lyft", "pinterest": "Pinterest", "cloudflare": "Cloudflare", "duolingo": "Duolingo", "roblox": "Roblox",
+    "twitch": "Twitch", "mongodb": "MongoDB", "datadog": "Datadog", "spacex": "SpaceX", "andurilindustries": "Anduril",
+    "sofi": "SoFi", "block": "Block", "affirm": "Affirm", "samsara": "Samsara", "scaleai": "Scale AI", "waymo": "Waymo",
+    "epicgames": "Epic Games", "riotgames": "Riot Games", "nuro": "Nuro", "verkada": "Verkada", "vercel": "Vercel",
+    "ziprecruiter": "ZipRecruiter", "point72": "Point72", "imc": "IMC Trading", "drweng": "DRW", "jumptrading": "Jump Trading",
+    "oscar": "Oscar Health", "formlabs": "Formlabs", "figureai": "Figure", "astranis": "Astranis"
+  },
+  "lever": {
+    "palantir": "Palantir", "matchgroup": "Match Group", "zoox": "Zoox", "shieldai": "Shield AI", "ekimetrics": "Ekimetrics"
+  },
+  "ashby": {
+    "ramp": "Ramp", "notion": "Notion", "snowflake": "Snowflake", "perplexity": "Perplexity", "cohere": "Cohere",
+    "sierra": "Sierra", "modal": "Modal", "mercor": "Mercor"
+  }
+}

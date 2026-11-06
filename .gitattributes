@@ -1,0 +1,6 @@
+# store and check out text files with LF endings on every computer, so copies shared
+# between the EECS sites stay byte-for-byte identical
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.mp4 binary
