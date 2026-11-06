@@ -1,15 +1,27 @@
-# opens pull requests for dependency updates, and CI checks them before anything is merged
+# opens a few pull requests a month for safe updates, and CI checks them before anything is merged.
+# Major versions are left out because they can break things, and Dependabot branches don't build on Vercel
+# (see vercel.json), so they can't use up its build limit.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    open-pull-requests-limit: 2
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    open-pull-requests-limit: 2
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
