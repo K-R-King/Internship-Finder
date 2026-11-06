@@ -9,6 +9,7 @@ export interface Internship {
   gradOnly: boolean;       // for graduate students
   sponsorship: "offers" | "none" | "citizens" | null;  // null when the listing doesn't say
   posted: number | null;   // seconds since 1970
+  added?: number;          // when it first appeared here, seconds since 1970
   source: string;
 }
 
@@ -31,11 +32,12 @@ export interface Filters {
   undergrad: boolean;
   remote: boolean;
   sponsorship: boolean;  // hide listings that rule out visa sponsorship
+  fresh: boolean;        // only listings added since the last visit
   view: "all" | "saved" | "applied";
 }
 
 export const NO_FILTERS: Filters = {
-  query: "", location: "", field: "", season: "", undergrad: false, remote: false, sponsorship: false, view: "all",
+  query: "", location: "", field: "", season: "", undergrad: false, remote: false, sponsorship: false, fresh: false, view: "all",
 };
 
 export const SEASONS = ["Summer", "Fall", "Winter", "Spring"];
@@ -83,7 +85,10 @@ export function inPlace(location: string, query: string): boolean {
   return STATES[code] !== undefined && has(location, STATES[code]);
 }
 
-export function matches(item: Internship, f: Filters): boolean {
+export const isNew = (item: Internship, since: number | null) => since !== null && (item.added ?? 0) > since;
+
+export function matches(item: Internship, f: Filters, since: number | null = null): boolean {
+  if (f.fresh && !isNew(item, since)) return false;
   const text = `${item.company} ${item.title}`;
   if (!f.query.trim().split(/\s+/).every((word) => has(text, word))) return false;
   if (f.location.trim() && !item.locations.some((l) => inPlace(l, f.location))) return false;
@@ -93,6 +98,17 @@ export function matches(item: Internship, f: Filters): boolean {
   if (f.remote && !item.locations.some((l) => has(l, "remote"))) return false;
   if (f.sponsorship && item.sponsorship && item.sponsorship !== "offers") return false;
   return true;
+}
+
+/** A search passed in the address, as links from the Planner do: ?q=security&field=Software&location=LA */
+export function filtersFromUrl(search: string, items: Internship[]): Partial<Filters> {
+  const params = new URLSearchParams(search);
+  const field = params.get("field");
+  return {
+    ...(params.get("q") && { query: params.get("q")! }),
+    ...(params.get("location") && { location: params.get("location")! }),
+    ...(field && items.some((item) => item.field === field) && { field }),
+  };
 }
 
 /** What a browser saved. Anything damaged is dropped, and entries from before listings were copied get their copy. */

@@ -1,13 +1,20 @@
 name: Refresh internships
 
-# rebuilds public/internships.json every day; pushing it deploys the site
+# rebuilds public/internships.json every day; pushing it deploys the site. If a source or the whole
+# refresh fails, whatever could be gathered is still saved and an issue is opened.
 on:
   schedule:
     - cron: "17 13 * * *"
   workflow_dispatch:
+    inputs:
+      test_alert:
+        description: Pretend the refresh failed, to check that an issue gets opened
+        type: boolean
+        default: false
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   refresh:
@@ -17,10 +24,23 @@ jobs:
       - uses: actions/setup-node@v7.1.0
         with:
           node-version: 22
-      - run: node scripts/sync-internships.mjs
-      - run: |
+      - id: sync
+        continue-on-error: true
+        run: ${{ inputs.test_alert && 'exit 1' || 'node scripts/sync-internships.mjs' }}
+      - id: save
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/internships.json
+          git add public/internships.json data/short-links.json
           git commit -m "Refresh internships" || exit 0
           git push
+      - name: Open an issue if anything failed
+        if: always() && (steps.sync.outcome == 'failure' || steps.save.outcome == 'failure')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create refresh-failed --color B60205 --force
+          if [ -z "$(gh issue list --label refresh-failed --state open --json number --jq '.[0].number')" ]; then
+            gh issue create --label refresh-failed --title "Internship refresh failed" --body "The daily refresh had a problem, so listings may be out of date: $RUN_URL"
+          fi
