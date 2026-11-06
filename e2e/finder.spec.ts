@@ -100,6 +100,36 @@ test("two letters search for a state", async ({ page }) => {
   await expect(page.getByText("Nothing matches those filters")).toBeVisible();
 });
 
+test("marks listings added since the last visit, and a refresh keeps them marked", async ({ page }) => {
+  await page.route("**/internships.json", (route) => route.fulfill({
+    json: { ...DATA, items: DATA.items.map((item) => ({ ...item, added: item.id === "a" ? 2000 : 100 })) },
+  }));
+  await page.goto("/");
+  await expect(page.getByText("64 internships, newest first")).toBeVisible();
+  await expect(page.getByText(/New since last visit/)).toHaveCount(0);  // a first visit marks nothing
+
+  await page.evaluate(() => {
+    localStorage.setItem("internship-finder:last-visit", "1500");
+    sessionStorage.clear();
+  });
+  await page.reload();
+  await page.getByLabel("New since last visit (1)").check();
+  await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page)).toContainText("Acme");
+  await expect(rows(page).getByText("New", { exact: true })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByLabel("New since last visit (1)")).toBeVisible();
+});
+
+test("a search in the address opens that search", async ({ page }) => {
+  await page.route("**/internships.json", (route) => route.fulfill({ json: DATA }));
+  await page.goto("/?q=accounting&field=Business%20%26%20Finance");
+  await expect(page.getByText("1 internship, newest first")).toBeVisible();
+  await expect(page.getByLabel("Search by company or role")).toHaveValue("accounting");
+  await expect(page.getByLabel("Field")).toHaveValue("Business & Finance");
+});
+
 test("apply links go to the listing, in a new tab", async ({ page }) => {
   await open(page);
   const link = page.getByRole("link", { name: /Apply to Software Intern at Acme/ });

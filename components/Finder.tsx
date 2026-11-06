@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { age, matches, NO_FILTERS, readTracked, searchElsewhere, SEASONS, type Data, type Filters, type Internship, type Status, type Tracked } from "@/lib/internships";
+import { age, filtersFromUrl, isNew, matches, NO_FILTERS, readTracked, searchElsewhere, SEASONS, type Data, type Filters, type Internship, type Status, type Tracked } from "@/lib/internships";
 
 const PAGE = 50;
 const STORAGE_KEY = "internship-finder:tracked";
+const LAST_VISIT_KEY = "internship-finder:last-visit";
 
 const VIEWS: { id: Filters["view"]; label: string }[] = [
   { id: "all", label: "All" },
@@ -26,6 +27,23 @@ function loadTracked(items: Internship[]): Tracked {
   }
 }
 
+/**
+ * When this browser last came by, or null on a first visit. The answer holds for the whole visit, so a refresh
+ * doesn't clear what's marked as new.
+ */
+function lastVisit(): number | null {
+  try {
+    const known = sessionStorage.getItem(LAST_VISIT_KEY);
+    if (known !== null) return Number(known) || null;
+    const last = localStorage.getItem(LAST_VISIT_KEY) ?? "";
+    sessionStorage.setItem(LAST_VISIT_KEY, last);
+    localStorage.setItem(LAST_VISIT_KEY, String(Math.round(Date.now() / 1000)));
+    return Number(last) || null;
+  } catch {
+    return null;
+  }
+}
+
 function saveTracked(tracked: Tracked) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(tracked));
@@ -36,10 +54,11 @@ function saveTracked(tracked: Tracked) {
 
 const field = "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900";
 
-function Row({ item, status, closed, updated, onTrack }: {
+function Row({ item, status, closed, fresh, updated, onTrack }: {
   item: Internship;
   status?: Status;
   closed: boolean;  // tracked, but no longer in the listings
+  fresh: boolean;   // added since the last visit
   updated: number;
   onTrack: (item: Internship, status: Status) => void;
 }) {
@@ -68,6 +87,7 @@ function Row({ item, status, closed, updated, onTrack }: {
         </p>
         <div className="mt-2 flex flex-wrap gap-1.5 text-xs font-medium">
           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-700 dark:bg-slate-800 dark:text-slate-200">{item.field}</span>
+          {fresh && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-900 dark:bg-amber-950 dark:text-amber-200">New</span>}
           {closed && <span className="rounded-full bg-red-100 px-2 py-0.5 text-red-800 dark:bg-red-950 dark:text-red-200">No longer listed</span>}
           {item.gradOnly && <span className="rounded-full bg-violet-100 px-2 py-0.5 text-violet-800 dark:bg-violet-950 dark:text-violet-200">Grad students</span>}
           {item.sponsorship === "offers" && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">Sponsors visas</span>}
@@ -98,6 +118,7 @@ export default function Finder() {
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [tracked, setTracked] = useState<Tracked>({});
   const [shown, setShown] = useState(PAGE);
+  const [since, setSince] = useState<number | null>(null);
 
   useEffect(() => {
     fetch("/internships.json")
@@ -108,6 +129,8 @@ export default function Finder() {
       .then((loaded: Data) => {
         setData(loaded);
         setTracked(loadTracked(loaded.items));
+        setSince(lastVisit());
+        setFilters((current) => ({ ...current, ...filtersFromUrl(window.location.search, loaded.items) }));
       })
       .catch((err) => {
         console.error(err);
@@ -119,8 +142,9 @@ export default function Finder() {
     const pool = filters.view === "all"
       ? data?.items ?? []
       : Object.values(tracked).filter((t) => t.status === filters.view).map((t) => t.item);
-    return pool.filter((item) => matches(item, filters));
-  }, [data, filters, tracked]);
+    return pool.filter((item) => matches(item, filters, since));
+  }, [data, filters, tracked, since]);
+  const newCount = useMemo(() => (data?.items ?? []).filter((item) => isNew(item, since)).length, [data, since]);
   const open = useMemo(() => new Set((data?.items ?? []).map((i) => i.url)), [data]);
   const fields = useMemo(() => [...new Set((data?.items ?? []).map((i) => i.field))].sort(), [data]);
 
@@ -166,6 +190,12 @@ export default function Finder() {
               {c.label}
             </label>
           ))}
+          {newCount > 0 && (
+            <label className="flex items-center gap-2 font-medium">
+              <input type="checkbox" checked={filters.fresh} onChange={(e) => change({ fresh: e.target.checked })} className="accent-berkeley" />
+              New since last visit ({newCount.toLocaleString()})
+            </label>
+          )}
           <div className="ml-auto flex gap-1" role="group" aria-label="Show">
             {VIEWS.map((v) => (
               <button
@@ -207,7 +237,7 @@ export default function Finder() {
 
       <ul className="space-y-3">
         {results.slice(0, shown).map((item) => (
-          <Row key={item.id} item={item} status={tracked[item.url]?.status} closed={!open.has(item.url)} updated={data.updated} onTrack={track} />
+          <Row key={item.id} item={item} status={tracked[item.url]?.status} closed={!open.has(item.url)} fresh={isNew(item, since)} updated={data.updated} onTrack={track} />
         ))}
       </ul>
 

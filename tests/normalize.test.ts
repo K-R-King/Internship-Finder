@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { inPlace, matches, NO_FILTERS, readTracked, type Internship } from "@/lib/internships";
-import { dedupe, fieldOf, fromGreenhouse, fromSimplify, fromVansh, isInternship, keep, termHasPassed, termsIn } from "@/lib/normalize.mjs";
+import { filtersFromUrl, inPlace, isNew, matches, NO_FILTERS, readTracked, type Internship } from "@/lib/internships";
+import { dedupe, fieldOf, fromGreenhouse, fromSimplify, fromVansh, isInternship, keep, parseBoardLink, termHasPassed, termsIn } from "@/lib/normalize.mjs";
 
 const NOV_2026 = new Date("2026-11-06");
 const simplifyRow = {
@@ -208,5 +208,52 @@ describe("readTracked", () => {
 
   it("drops entries with the wrong shape", () => {
     expect(readTracked({ a: { status: "nope", item }, b: { status: "saved" } }, [item])).toEqual({});
+  });
+});
+
+describe("parseBoardLink", () => {
+  const uuid = "12345678-1234-1234-1234-123456789ABC";
+
+  it.each([
+    ["https://boards.greenhouse.io/Stripe/jobs/123", { kind: "greenhouse", token: "stripe", id: "123" }],
+    ["https://job-boards.greenhouse.io/figma/jobs/456?gh_src=x", { kind: "greenhouse", token: "figma", id: "456" }],
+    [`https://jobs.lever.co/palantir/${uuid}`, { kind: "lever", token: "palantir", id: uuid.toLowerCase() }],
+    [`https://jobs.ashbyhq.com/ramp/${uuid}/application`, { kind: "ashby", token: "ramp", id: uuid.toLowerCase() }],
+  ])("reads %s", (url, board) => {
+    expect(parseBoardLink(url)).toEqual(board);
+  });
+
+  it.each(["https://acme.wd1.myworkdayjobs.com/jobs/1", "https://boards.greenhouse.io/stripe", "https://jobs.lever.co/palantir"])("leaves %s alone", (url) => {
+    expect(parseBoardLink(url)).toBeNull();
+  });
+});
+
+describe("what's new", () => {
+  const item = { company: "Acme", title: "Intern", locations: [], terms: [], added: 200 } as unknown as Internship;
+
+  it("marks listings added since the last visit", () => {
+    expect(isNew(item, 100)).toBe(true);
+    expect(isNew(item, 300)).toBe(false);
+    expect(isNew({ ...item, added: undefined }, 100)).toBe(false);
+  });
+
+  it("marks nothing on a first visit", () => expect(isNew(item, null)).toBe(false));
+
+  it("filters to new listings", () => {
+    expect(matches(item, { ...NO_FILTERS, fresh: true }, 100)).toBe(true);
+    expect(matches(item, { ...NO_FILTERS, fresh: true }, 300)).toBe(false);
+  });
+});
+
+describe("filtersFromUrl", () => {
+  const items = [{ field: "Software" }] as Internship[];
+
+  it("reads a search from the address", () => {
+    expect(filtersFromUrl("?q=security&location=LA&field=Software", items)).toEqual({ query: "security", location: "LA", field: "Software" });
+  });
+
+  it("ignores a field no listing has, and an empty address", () => {
+    expect(filtersFromUrl("?field=Nope", items)).toEqual({});
+    expect(filtersFromUrl("", items)).toEqual({});
   });
 });

@@ -7,6 +7,8 @@ Open internships for university students, gathered from company job boards and s
 - **One list from many sources**, with the same posting from different sources merged, and ended terms and long-abandoned listings left out.
 - **Search and filters:** company or role, location, field, season, open to undergrads, remote, and visa sponsorship.
 - **Saved and Applied tracking**, stored in your browser. Tracked listings stay after they close, marked "No longer listed".
+- **New since your last visit:** listings added since you last came by are labeled, with a filter to show only those.
+- **Searches in the address:** `?q=security&field=Software&location=LA` opens that search, which is how the EECS Planner links here.
 - Light and dark mode, and a layout that works on phones.
 
 ## Where the listings come from
@@ -29,7 +31,9 @@ npm run dev
 
 Open `http://localhost:3005`.
 
-`npm run sync` skips a source that fails, and keeps the old file if the result shrinks by more than half. `.github/workflows/refresh.yml` runs it every day once the project is on GitHub.
+`npm run sync` skips a source that fails, and keeps the old file if the result shrinks by more than half. `.github/workflows/refresh.yml` runs it every day and opens an issue if anything goes wrong.
+
+Short links are swapped for the pages they lead to, and those answers are kept in `data/short-links.json`. Listings are dropped when their job has left its Greenhouse, Lever or Ashby board, or when one list marks a page closed. Most other job sites answer a closed job with a normal page, so those can't be checked and may stay listed until a list removes them.
 
 ```bash
 npm test                # listing clean-up rules
