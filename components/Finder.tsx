@@ -149,7 +149,7 @@ export default function Finder() {
       <section aria-label="Filters" className="space-y-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <input aria-label="Search by company or role" placeholder="Company or role" value={filters.query} onChange={(e) => change({ query: e.target.value })} className={field} />
-          <input aria-label="Location" placeholder="Location, e.g. CA or London" value={filters.location} onChange={(e) => change({ location: e.target.value })} className={field} />
+          <input aria-label="Location" placeholder="City, state or country, e.g. LA, CA or London" value={filters.location} onChange={(e) => change({ location: e.target.value })} className={field} />
           <select aria-label="Field" value={filters.field} onChange={(e) => change({ field: e.target.value })} className={field}>
             <option value="">All fields</option>
             {fields.map((f) => <option key={f}>{f}</option>)}
