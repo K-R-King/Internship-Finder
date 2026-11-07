@@ -1,7 +1,8 @@
 name: Refresh internships
 
-# rebuilds public/internships.json every day; pushing it deploys the site. If a source or the whole
-# refresh fails, whatever could be gathered is still saved and an issue is opened.
+# Rebuilds the listings every day and publishes them to the "data" branch, which the site reads directly.
+# That branch is replaced each time rather than added to, so the repo doesn't grow, and no deploy is needed.
+# If a source or the whole refresh fails, whatever could be gathered is still published and an issue is opened.
 on:
   schedule:
     - cron: "17 13 * * *"
@@ -19,21 +20,38 @@ permissions:
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
         with:
           node-version: 22
+      - name: Bring back the last listings, for dates added and the saved lookups
+        run: |
+          if git fetch --depth=1 origin data; then
+            mkdir -p last
+            git --work-tree=last checkout FETCH_HEAD -- .
+            cp last/internships.json last/jobs-mid.json last/jobs-senior.json public/ 2>/dev/null || true
+            cp last/short-links.json last/company-sizes.json data/ 2>/dev/null || true
+          fi
       - id: sync
         continue-on-error: true
         run: ${{ inputs.test_alert && 'exit 1' || 'node scripts/sync-internships.mjs' }}
       - id: save
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          mkdir -p out
+          cp public/internships.json public/jobs-mid.json public/jobs-senior.json data/short-links.json data/company-sizes.json out/
+          # Vercel shouldn't try to build this branch
+          echo '{ "git": { "deploymentEnabled": false } }' > out/vercel.json
+          cd out
+          git init -q -b data
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/internships.json data/short-links.json
-          git commit -m "Refresh internships" || exit 0
-          git push
+          git add .
+          git commit -q -m "Listings from $(date -u +%Y-%m-%d)"
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" data
       - name: Open an issue if anything failed
         if: always() && (steps.sync.outcome == 'failure' || steps.save.outcome == 'failure')
         env:

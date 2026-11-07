@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { filtersFromUrl, inPlace, isNew, matches, NO_FILTERS, readTracked, type Internship } from "@/lib/internships";
-import { dedupe, fieldOf, fromGreenhouse, fromSimplify, fromVansh, isInternship, keep, parseBoardLink, termHasPassed, termsIn } from "@/lib/normalize.mjs";
+import { extraLevels, filtersFromUrl, inPlace, isNew, matches, NO_FILTERS, readTracked, searchElsewhere, SIZES, termsIn, type Internship } from "@/lib/internships";
+import { dedupe, fieldOf, fromGreenhouse, fromMuse, fromNewGrad, fromSimplify, fromSmartRecruiters, fromVansh, fromWorkday, isEntryLevel, isInternship, shortId, isUSPlace, jobType, keep, parseBoardLink, parseCareerSite, termHasPassed, termsIn as termsInTitle, usOnly, withoutEndedTerms, withYear } from "@/lib/normalize.mjs";
 
 const NOV_2026 = new Date("2026-11-06");
 const simplifyRow = {
@@ -45,7 +45,7 @@ describe("fieldOf", () => {
 
 describe("terms", () => {
   it("reads terms from titles", () => {
-    expect(termsIn("Intern (Summer 2027 or Autumn 2027)")).toEqual(["Summer 2027", "Fall 2027"]);
+    expect(termsInTitle("Intern (Summer 2027 or Autumn 2027)")).toEqual(["Summer 2027", "Fall 2027"]);
   });
 
   it("knows which terms have ended", () => {
@@ -67,6 +67,9 @@ describe("keep", () => {
   it("drops a year-old listing that names no term", () => expect(keep({ ...item, terms: [], posted: yearsAgo(1) }, NOV_2026)).toBe(false));
   it("keeps a year-old listing for a term ahead", () => expect(keep({ ...item, posted: yearsAgo(1) }, NOV_2026)).toBe(true));
   it("drops anything over two years old", () => expect(keep({ ...item, posted: yearsAgo(2) }, NOV_2026)).toBe(false));
+  it("drops a listing's terms that have ended", () => {
+    expect(withoutEndedTerms({ ...item, terms: ["Summer 2026", "Fall 2026", "Summer 2027"] }, NOV_2026).terms).toEqual(["Fall 2026", "Summer 2027"]);
+  });
   it("drops links that aren't web pages", () => expect(keep({ ...item, url: "javascript:alert(1)" }, NOV_2026)).toBe(false));
 });
 
@@ -229,7 +232,7 @@ describe("parseBoardLink", () => {
     expect(parseBoardLink(url)).toEqual(board);
   });
 
-  it.each(["https://acme.wd1.myworkdayjobs.com/jobs/1", "https://boards.greenhouse.io/stripe", "https://jobs.lever.co/palantir"])("leaves %s alone", (url) => {
+  it.each(["https://acme.wd1.myworkdayjobs.com/jobs/1", "https://example.com/stripe"])("leaves %s alone", (url) => {
     expect(parseBoardLink(url)).toBeNull();
   });
 });
@@ -261,5 +264,246 @@ describe("filtersFromUrl", () => {
   it("ignores a field no listing has, and an empty address", () => {
     expect(filtersFromUrl("?field=Nope", items)).toEqual({});
     expect(filtersFromUrl("", items)).toEqual({});
+  });
+});
+
+describe("job level", () => {
+  it.each([
+    ["New Grad Software Engineer", "entry"],
+    ["Software Engineer I", "entry"],
+    ["Junior Data Analyst", "entry"],
+    ["Early Career Program", "entry"],
+    ["Software Engineer Intern", "internship"],
+    ["Summer Student - Marketing", "internship"],
+    ["Summer Analyst", "internship"],
+    ["Student Worker, Library", "internship"],
+    ["Student Health Coordinator", "mid"],
+    ["Senior Software Engineer", "senior"],
+    ["Staff Engineer", "senior"],
+    ["Director of Sales", "senior"],
+    ["Software Engineer III", "senior"],
+    ["Junior Engineering Manager", "senior"],
+    ["Software Engineer II", "mid"],
+    ["Software Engineer", "mid"],
+    ["Product Manager", "mid"],
+    ["High School Internship", null],
+  ])("%s is %s", (title, type) => {
+    expect(jobType(title)).toBe(type);
+  });
+
+  it("doesn't call a plain title entry level", () => expect(isEntryLevel("Software Engineer")).toBe(false));
+});
+
+describe("terms", () => {
+  it.each([
+    ["Summer", "2026-11-07", "Summer 2027"],
+    ["Fall", "2026-11-07", "Fall 2027"],
+    ["Winter", "2026-11-07", "Winter 2026"],
+    ["Spring", "2026-11-07", "Spring 2027"],
+    ["Summer", "2027-02-01", "Summer 2027"],
+    ["Summer 2028", "2026-11-07", "Summer 2028"],
+  ])("%s in %s is %s", (term, date, expected) => {
+    expect(withYear(term, new Date(date))).toBe(expected);
+  });
+
+  it("lists terms in date order, leaving out anything without a year", () => {
+    const items = [{ terms: ["Fall 2027", "Summer 2027"] }, { terms: ["Spring 2027", "Summer", "Summer 2028"] }] as Internship[];
+    expect(termsIn(items)).toEqual(["Spring 2027", "Summer 2027", "Fall 2027", "Summer 2028"]);
+  });
+});
+
+describe("U.S. only", () => {
+  it.each([
+    "Austin, TX", "Los Angeles, CA", "San Diego, California", "New York, NY", "NYC", "SF", "Seattle", "Remote", "Remote in USA",
+    "Remote - US", "United States", "New London, CT", "Washington, DC", "Cambridge, MA", "Birmingham, AL", "Hybrid - Boston, MA",
+    "Wilmington, DE", "Flexible", "Ontario, CA", "CA - San Jose", "Canada / US",
+    "London, KY", "Vancouver, WA", "Chicago, London", "New York or London",
+    "Canton, OH", "1177 Avenue of the Americas New York NY",
+  ])("keeps %s", (place) => expect(isUSPlace(place)).toBe(true));
+
+  it.each([
+    "Toronto, ON, Canada", "Toronto", "Vancouver, BC, CA", "Waterloo, ON", "London, UK", "London", "Bangalore, India", "Berlin, Germany",
+    "Remote - Canada", "Remote, EMEA", "Singapore", "Multiple Locations", "Berlin, DE", "Munich, DE", "Hybrid", "London, ON",
+    "CA-Ontario-Toronto", "CA Toronto", "CA ON Toronto Office", "CA.ON.Toronto.191 The West Mall", "CAD - Toronto, Ontario - Remote",
+    "DE-Munich-MSO", "DEU - Remote - Munich", "Fins Only-DE-Munich-MSO", "DE-Berlin-Trion Building",
+    "North America/MEX/Apodaca- Nidec Mexico Shared Services", "London, CA",
+    "MEX - Santa Clara - ST01", "MEX-Remote", "MEX - KROMA Tultitlan DC", "CAN - Toronto",
+  ])("drops %s", (place) => expect(isUSPlace(place)).toBe(false));
+
+  it("keeps only a listing's U.S. places, and splits combined ones", () => {
+    const item = fromSimplify({ ...simplifyRow, locations: ["Austin, TX; London, UK", "Toronto"] });
+    expect(usOnly(item)?.locations).toEqual(["Austin, TX"]);
+  });
+
+  it("drops a listing with no U.S. places", () => {
+    expect(usOnly(fromSimplify({ ...simplifyRow, locations: ["London, UK"] }))).toBeNull();
+  });
+});
+
+describe("work authorization", () => {
+  const job = (title: string, sponsorship: string) => fromSimplify({ ...simplifyRow, title, sponsorship });
+
+  it("treats clearance and citizenship titles as citizens only", () => {
+    expect(job("Security Clearance Required Intern", "Other").sponsorship).toBe("citizens");
+    expect(job("Software Intern (U.S. Citizens Only)", "Other").sponsorship).toBe("citizens");
+    expect(job("Software Intern", "Other").sponsorship).toBeNull();
+  });
+
+  it("permanent residents see all but citizens-only jobs", () => {
+    const filters = { ...NO_FILTERS, permanent: true };
+    expect(matches({ ...job("Intern", "Other"), sponsorship: "citizens" }, filters)).toBe(false);
+    expect(matches(job("Intern", "Does Not Offer Sponsorship"), filters)).toBe(true);
+    expect(matches(job("Intern", "Other"), filters)).toBe(true);
+  });
+});
+
+describe("filters", () => {
+  const job = (locations: string[], extra = {}) => ({ ...fromSimplify(simplifyRow), locations, ...extra });
+
+  it("a place with Remote means jobs there or remote ones", () => {
+    const filters = { ...NO_FILTERS, location: "LA", remote: true };
+    expect(matches(job(["Los Angeles, CA"]), filters)).toBe(true);
+    expect(matches(job(["Remote"]), filters)).toBe(true);
+    expect(matches(job(["Seattle, WA"]), filters)).toBe(false);
+  });
+
+  it("Remote alone means remote jobs", () => {
+    expect(matches(job(["Remote in USA"]), { ...NO_FILTERS, remote: true })).toBe(true);
+    expect(matches(job(["Austin, TX"]), { ...NO_FILTERS, remote: true })).toBe(false);
+  });
+
+  it("shows internships and entry level unless asked for more", () => {
+    expect(matches(job(["Austin, TX"], { type: "senior" }), NO_FILTERS)).toBe(false);
+    expect(matches(job(["Austin, TX"], { type: "senior" }), { ...NO_FILTERS, level: "senior" })).toBe(true);
+    expect(matches(job(["Austin, TX"], { type: "mid" }), { ...NO_FILTERS, level: "all" })).toBe(true);
+    expect(matches(job(["Austin, TX"], { type: "entry" }), NO_FILTERS)).toBe(true);
+  });
+
+  it("filters by company size, leaving out companies of unknown size", () => {
+    const filters = { ...NO_FILTERS, size: String(SIZES.findIndex((s) => s.min === 1000)) };
+    expect(matches(job(["Austin, TX"], { employees: 1500 }), filters)).toBe(true);
+    expect(matches(job(["Austin, TX"], { employees: 2000 }), filters)).toBe(false);
+    expect(matches(job(["Austin, TX"]), filters)).toBe(false);
+  });
+
+  it("filters by level, treating older saved listings as internships", () => {
+    expect(matches(job(["Austin, TX"], { type: "entry" }), { ...NO_FILTERS, level: "entry" })).toBe(true);
+    expect(matches(job(["Austin, TX"], { type: "entry" }), { ...NO_FILTERS, level: "internship" })).toBe(false);
+    expect(matches(job(["Austin, TX"], { type: undefined }), { ...NO_FILTERS, level: "internship" })).toBe(true);
+  });
+
+  it("filters by a term with its year", () => {
+    expect(matches(job(["Austin, TX"], { terms: ["Summer 2027"] }), { ...NO_FILTERS, term: "Summer 2027" })).toBe(true);
+    expect(matches(job(["Austin, TX"], { terms: ["Summer 2028"] }), { ...NO_FILTERS, term: "Summer 2027" })).toBe(false);
+  });
+});
+
+describe("other job sites", () => {
+  it("links to Handshake, LinkedIn and Simplify with the level", () => {
+    const [handshake, linkedin, indeed, simplify] = searchElsewhere({ ...NO_FILTERS, query: "data", level: "entry" });
+    expect(handshake.url).toContain("joinhandshake.com/stu/postings?query=data+entry+level");
+    expect(Object.fromEntries(new URL(indeed.url).searchParams)).toEqual({ q: "data entry level", l: "United States" });
+    expect(new URL(linkedin.url).searchParams.get("f_E")).toBe("2");
+    expect(new URL(linkedin.url).searchParams.get("location")).toBe("United States");
+    expect(new URL(simplify.url).searchParams.get("q")).toBe("data entry level");
+  });
+});
+
+describe("new sources", () => {
+  it("reads The Muse", () => {
+    const job = fromMuse({ id: 1, name: "Marketing Intern", publication_date: "2026-11-03T18:37:34Z", locations: [{ name: "Flexible / Remote" }], categories: [{ name: "Marketing and PR" }], levels: [{ name: "Internship" }], refs: { landing_page: "https://www.themuse.com/jobs/x/y" }, company: { name: "Acme" } });
+    expect(job).toMatchObject({ company: "Acme", type: "internship", locations: ["Remote"], url: "https://www.themuse.com/jobs/x/y", field: "Marketing & Comms" });
+    expect(keep(job, NOV_2026)).toBe(true);
+  });
+
+  it("keeps a Muse internship with no 'intern' in its title", () => {
+    const job = fromMuse({ id: 2, name: "Summer Analyst", publication_date: "2026-11-03T18:37:34Z", locations: [{ name: "Boston, MA" }], levels: [{ name: "Internship" }], refs: { landing_page: "https://www.themuse.com/jobs/x/z" }, company: { name: "Acme" } });
+    expect(keep(job, NOV_2026)).toBe(true);
+  });
+
+  it("reads The Muse's other levels", () => {
+    const job = (level: string) => fromMuse({ id: 4, name: "Analyst", locations: [], levels: [{ name: level }], company: { name: "Acme" } });
+    expect(job("Mid Level").type).toBe("mid");
+    expect(job("Senior Level").type).toBe("senior");
+    expect(job("management").type).toBe("senior");
+  });
+
+  it("keeps mid and senior jobs", () => {
+    const job = { ...fromSimplify(simplifyRow), title: "Senior Engineer", type: "senior", posted: NOV_2026.getTime() / 1000 };
+    expect(keep(job, NOV_2026)).toBe(true);
+  });
+
+  it("marks The Muse's entry-level jobs", () => {
+    expect(fromMuse({ id: 3, name: "Registered Nurse", locations: [], categories: [{ name: "Healthcare" }], levels: [{ name: "Entry Level" }], company: { name: "Acme" } })).toMatchObject({ type: "entry", field: "Healthcare" });
+  });
+
+  it("trusts the internship lists, even when a title doesn't say intern", () => {
+    const job = { ...fromSimplify({ ...simplifyRow, title: "Software Engineer (Summer 2027)" }), posted: NOV_2026.getTime() / 1000 };
+    expect(job.type).toBe("internship");
+    expect(keep(job, NOV_2026)).toBe(true);
+    expect(fromVansh({ ...simplifyRow, title: "Software Engineer", season: "Summer" }).type).toBe("internship");
+  });
+
+  it("needs a job board's internship to say so", () => {
+    const job = { ...fromGreenhouse({ id: 1, title: "Software Engineer", absolute_url: "https://boards.greenhouse.io/a/jobs/1", location: { name: "Austin, TX" } }, "A"), type: "internship" };
+    expect(keep(job, NOV_2026)).toBe(false);
+  });
+
+  it("reads the new grad list as entry level", () => {
+    expect(fromNewGrad({ ...simplifyRow, title: "Software Engineer" }).type).toBe("entry");
+  });
+
+  it("reads SmartRecruiters", () => {
+    const job = fromSmartRecruiters({ id: "9", name: "Data Intern", company: { name: "Visa" }, location: { city: "Austin", region: "TX" }, releasedDate: "2026-11-01T00:00:00Z", experienceLevel: { id: "internship" } }, "Visa");
+    expect(job).toMatchObject({ company: "Visa", locations: ["Austin, TX"], url: "https://jobs.smartrecruiters.com/Visa/9", type: "internship" });
+  });
+
+  it("reads Workday", () => {
+    const site = { host: "acme.wd5.myworkdayjobs.com", site: "Careers", company: "Acme" };
+    const job = fromWorkday({ title: "Software Intern", externalPath: "/job/Austin-TX/Software-Intern_R1", locationsText: "US, TX, Austin", postedOn: "Posted 3 Days Ago" }, site, NOV_2026);
+    expect(job.url).toBe("https://acme.wd5.myworkdayjobs.com/Careers/job/Austin-TX/Software-Intern_R1");
+    expect(job.locations).toEqual(["Austin, TX"]);
+    expect(job.posted).toBe(NOV_2026.getTime() / 1000 - 3 * 86400);
+  });
+
+  it("uses the link's place when Workday only gives a count", () => {
+    const site = { host: "a.wd1.myworkdayjobs.com", site: "C", company: "A" };
+    expect(fromWorkday({ title: "Intern", externalPath: "/job/Austin-TX/I_1", locationsText: "2 Locations" }, site).locations).toEqual(["Austin TX"]);
+  });
+
+  it("finds career sites in links", () => {
+    expect(parseCareerSite("https://acme.wd5.myworkdayjobs.com/en-US/Careers/job/x")).toMatchObject({ kind: "workday", token: "acme", site: "Careers", host: "acme.wd5.myworkdayjobs.com" });
+    expect(parseCareerSite("https://jobs.smartrecruiters.com/Visa/123")).toMatchObject({ kind: "smartrecruiters", token: "Visa" });
+    expect(parseCareerSite("https://example.com/jobs")).toBeNull();
+  });
+
+  it("treats a page with and without a language as the same page", () => {
+    const a = fromSimplify({ ...simplifyRow, url: "https://acme.wd5.myworkdayjobs.com/en-US/Careers/job/1", locations: ["Austin, TX"] });
+    const b = fromSimplify({ ...simplifyRow, url: "https://acme.wd5.myworkdayjobs.com/Careers/job/1", locations: ["Dallas, TX"] });
+    expect(dedupe([a, b])).toHaveLength(1);
+  });
+});
+
+describe("levels kept in their own files", () => {
+  it.each([["", []], ["entry", []], ["mid", ["mid"]], ["senior", ["senior"]], ["all", ["mid", "senior"]]] as const)("%s needs %j", (level, files) => {
+    expect(extraLevels(level)).toEqual(files);
+  });
+
+  it("asks other sites for the right level", () => {
+    const linkedin = (level: "" | "mid" | "senior" | "all") => new URL(searchElsewhere({ ...NO_FILTERS, level })[1].url).searchParams;
+    expect(linkedin("mid").get("f_E")).toBe("3,4");
+    expect(linkedin("senior").get("f_E")).toBe("4,5");
+    expect(linkedin("all").get("f_E")).toBeNull();
+    expect(linkedin("all").get("keywords")).toBe("jobs");
+  });
+});
+
+describe("shortId", () => {
+  it("is short, steady and different for different listings", () => {
+    const id = shortId("Workday:acme.wd5.myworkdayjobs.com/job/Austin-TX/Software-Intern_R1");
+    expect(id).toBe(shortId("Workday:acme.wd5.myworkdayjobs.com/job/Austin-TX/Software-Intern_R1"));
+    expect(id.length).toBeLessThanOrEqual(14);
+    const ids = new Set(Array.from({ length: 100000 }, (_, i) => shortId(`Greenhouse:${i}`)));
+    expect(ids.size).toBe(100000);
   });
 });

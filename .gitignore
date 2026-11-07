@@ -46,3 +46,10 @@ next-env.d.ts
 /blob-report/
 
 .vercel
+
+# the listings live on the "data" branch; npm run sync writes local copies here
+/public/internships.json
+/public/jobs-mid.json
+/public/jobs-senior.json
+/data/short-links.json
+/data/company-sizes.json
