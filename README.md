@@ -1,11 +1,12 @@
 # Internship Finder
 
-Open internships for university students, gathered from company job boards and student-run lists into one search.
+U.S. internships and entry-level jobs for university students, gathered from company job boards and public job lists into one search.
 
 ## Features
 
 - **One list from many sources**, with the same posting from different sources merged, and ended terms and long-abandoned listings left out.
-- **Search and filters:** company or role, location, field, season, open to undergrads, remote, and visa sponsorship.
+- **Search and filters:** company or role, location, field, term, level, open to undergrads, remote, permanent residents, and visa sponsorship. Results update as you change them, or press Search.
+- **U.S. only:** a listing keeps only its U.S. places, and is left out if it has none.
 - **Saved and Applied tracking**, stored in your browser. Tracked listings stay after they close, marked "No longer listed".
 - **New since your last visit:** listings added since you last came by are labeled, with a filter to show only those.
 - **Searches in the address:** `?q=security&field=Software&location=LA` opens that search, which is how the EECS Planner links here.
@@ -31,7 +32,9 @@ npm run dev
 
 Open `http://localhost:3005`.
 
-`npm run sync` skips a source that fails, and keeps the old file if the result shrinks by more than half. `.github/workflows/refresh.yml` runs it every day and opens an issue if anything goes wrong.
+`npm run sync` skips a source that fails, and keeps the old files if the result shrinks by more than half. It writes `public/internships.json` (internships and entry level, loaded first), `public/jobs-mid.json` and `public/jobs-senior.json` (loaded when someone picks those levels), which the page reads locally.
+
+`.github/workflows/refresh.yml` runs it every day (about an hour) and publishes the files to the `data` branch, which the live site reads from GitHub directly. That branch is replaced each time rather than added to, so the repo doesn't grow and no deploy is needed. It opens an issue if anything goes wrong.
 
 Short links are swapped for the pages they lead to, and those answers are kept in `data/short-links.json`. Listings are dropped when their job has left its Greenhouse, Lever or Ashby board, or when one list marks a page closed. Most other job sites answer a closed job with a normal page, so those can't be checked and may stay listed until a list removes them.
 

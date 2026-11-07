@@ -1,0 +1,8 @@
+{
+  "git": {
+    "deploymentEnabled": {
+      "dependabot/**": false,
+      "data": false
+    }
+  }
+}

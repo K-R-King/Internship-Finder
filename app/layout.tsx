@@ -6,7 +6,7 @@ import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 
-const DESCRIPTION = "Open internships for university students, gathered into one search.";
+const DESCRIPTION = "U.S. internships and entry-level jobs for university students, gathered into one search.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl("internships")),

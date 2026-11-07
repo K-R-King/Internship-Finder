@@ -7,6 +7,8 @@ export interface Internship {
   terms: string[];         // e.g. "Summer 2027"; empty when the listing doesn't say
   field: string;
   gradOnly: boolean;       // for graduate students
+  type?: Level;            // older saved listings don't have one, and are internships
+  employees?: number;      // the company's size, when it's known
   sponsorship: "offers" | "none" | "citizens" | null;  // null when the listing doesn't say
   posted: number | null;   // seconds since 1970
   added?: number;          // when it first appeared here, seconds since 1970
@@ -19,6 +21,7 @@ export interface Data {
   items: Internship[];
 }
 
+export type Level = "internship" | "entry" | "mid" | "senior";
 export type Status = "saved" | "applied";
 
 /** Keyed by listing page, with a copy of the listing so it stays here after it closes. */
@@ -28,19 +31,61 @@ export interface Filters {
   query: string;
   location: string;
   field: string;     // "" means any
-  season: string;    // "" means any
+  term: string;      // e.g. "Summer 2027"; "" means any
+  level: Level | "" | "all";  // "" means internships and entry level
+  size: string;               // index into SIZES; "" means any
   undergrad: boolean;
   remote: boolean;
   sponsorship: boolean;  // hide listings that rule out visa sponsorship
+  permanent: boolean;    // hide listings only for U.S. citizens
   fresh: boolean;        // only listings added since the last visit
   view: "all" | "saved" | "applied";
 }
 
 export const NO_FILTERS: Filters = {
-  query: "", location: "", field: "", season: "", undergrad: false, remote: false, sponsorship: false, fresh: false, view: "all",
+  query: "", location: "", field: "", term: "", level: "", size: "", undergrad: false, remote: false, sponsorship: false, permanent: false, fresh: false, view: "all",
 };
 
-export const SEASONS = ["Summer", "Fall", "Winter", "Spring"];
+export const LEVELS: { id: Filters["level"]; label: string }[] = [
+  { id: "", label: "Internships and entry level" },
+  { id: "internship", label: "Internships" },
+  { id: "entry", label: "Entry level" },
+  { id: "mid", label: "Mid level" },
+  { id: "senior", label: "Senior level" },
+  { id: "all", label: "All levels" },
+];
+
+export const LEVEL_NAMES: Record<Level, string> = { internship: "Internship", entry: "Entry level", mid: "Mid level", senior: "Senior level" };
+
+/** Levels kept in their own files, loaded only when someone asks for them. */
+export function extraLevels(level: Filters["level"]): ("mid" | "senior")[] {
+  return level === "all" ? ["mid", "senior"] : level === "mid" || level === "senior" ? [level] : [];
+}
+
+export const SIZES: { label: string; min: number; max: number }[] = [
+  { label: "5\u201310 employees", min: 5, max: 10 },
+  { label: "10\u201350 employees", min: 10, max: 50 },
+  { label: "50\u2013100 employees", min: 50, max: 100 },
+  { label: "100\u2013200 employees", min: 100, max: 200 },
+  { label: "200\u2013500 employees", min: 200, max: 500 },
+  { label: "500\u20131,000 employees", min: 500, max: 1000 },
+  { label: "1,000\u20132,000 employees", min: 1000, max: 2000 },
+  { label: "2,000+ employees", min: 2000, max: Infinity },
+];
+
+export const inSize = (employees: number | undefined, size: (typeof SIZES)[number]) =>
+  employees !== undefined && employees >= size.min && employees < size.max;
+
+const SEASON_ORDER = ["Spring", "Summer", "Fall", "Winter"];
+
+/** Every term with listings, in order: Summer 2027, Fall 2027, Summer 2028. */
+export function termsIn(items: Internship[]): string[] {
+  const rank = (term: string) => {
+    const [season, year] = term.split(" ");
+    return Number(year) * 10 + SEASON_ORDER.indexOf(season);
+  };
+  return [...new Set(items.flatMap((item) => item.terms))].filter((term) => /^\S+ \d{4}$/.test(term)).sort((a, b) => rank(a) - rank(b));
+}
 
 const has = (text: string, part: string) => text.toLowerCase().includes(part.trim().toLowerCase());
 
@@ -91,12 +136,19 @@ export function matches(item: Internship, f: Filters, since: number | null = nul
   if (f.fresh && !isNew(item, since)) return false;
   const text = `${item.company} ${item.title}`;
   if (!f.query.trim().split(/\s+/).every((word) => has(text, word))) return false;
-  if (f.location.trim() && !item.locations.some((l) => inPlace(l, f.location))) return false;
+  // "LA" with "Remote" means jobs in LA or remote ones, since a remote job has no city to match
+  if (f.location.trim() || f.remote) {
+    const nearby = f.location.trim() !== "" && item.locations.some((l) => inPlace(l, f.location));
+    if (!nearby && !(f.remote && item.locations.some((l) => has(l, "remote")))) return false;
+  }
+  const level = item.type ?? "internship";
+  if (f.level === "" ? level !== "internship" && level !== "entry" : f.level !== "all" && level !== f.level) return false;
+  if (f.size !== "" && !inSize(item.employees, SIZES[Number(f.size)])) return false;
   if (f.field && item.field !== f.field) return false;
-  if (f.season && !item.terms.some((t) => t.startsWith(f.season))) return false;
+  if (f.term && !item.terms.includes(f.term)) return false;
   if (f.undergrad && item.gradOnly) return false;
-  if (f.remote && !item.locations.some((l) => has(l, "remote"))) return false;
   if (f.sponsorship && item.sponsorship && item.sponsorship !== "offers") return false;
+  if (f.permanent && item.sponsorship === "citizens") return false;
   return true;
 }
 
@@ -104,7 +156,9 @@ export function matches(item: Internship, f: Filters, since: number | null = nul
 export function filtersFromUrl(search: string, items: Internship[]): Partial<Filters> {
   const params = new URLSearchParams(search);
   const field = params.get("field");
+  const level = params.get("level");
   return {
+    ...(LEVELS.some((l) => l.id === level) && { level: level as Filters["level"] }),
     ...(params.get("q") && { query: params.get("q")! }),
     ...(params.get("location") && { location: params.get("location")! }),
     ...(field && items.some((item) => item.field === field) && { field }),
@@ -120,7 +174,9 @@ export function readTracked(saved: unknown, items: Internship[]): Tracked {
       const item = items.find((i) => i.id === key);
       if (item) tracked[item.url] = { status: value, item };
     } else if ((value?.status === "saved" || value?.status === "applied") && value.item?.url === key) {
-      tracked[key] = value;
+      // a listing's link can change, so use the current copy when it's still here
+      const current = items.find((i) => i.url === key || i.id === value.item.id) ?? value.item;
+      tracked[current.url] = { status: value.status, item: current };
     }
   }
   return tracked;
@@ -128,17 +184,24 @@ export function readTracked(saved: unknown, items: Internship[]): Tracked {
 
 /**
  * The student's current search on sites whose listings can't be gathered here. LinkedIn forbids automated
- * access, so these are plain links that the student opens themselves.
+ * access, Indeed's rules block it, and Handshake needs a student login, so these are plain links that the student
+ * opens themselves.
  */
 export function searchElsewhere(f: Filters): { name: string; url: string }[] {
   const keywords = f.query.trim() || f.field;
-  const linkedin = new URLSearchParams({ keywords: keywords || "internship", f_E: "1" });  // f_E=1: internships
-  if (f.location.trim()) linkedin.set("location", f.location.trim());
+  const kind = { "": "internship", internship: "internship", entry: "entry level", mid: "", senior: "senior", all: "" }[f.level];
+  // LinkedIn's experience levels: 1 internship, 2 entry level, 3 associate, 4 mid-senior, 5 director
+  const levels = { "": "1,2", internship: "1", entry: "2", mid: "3,4", senior: "4,5", all: "" }[f.level];
+  const words = `${keywords} ${kind}`.trim();
+  const place = f.location.trim() || "United States";
+  const linkedin = new URLSearchParams({ keywords: words || "jobs", location: place });
+  if (levels) linkedin.set("f_E", levels);
   if (f.remote) linkedin.set("f_WT", "2");  // f_WT=2: remote
-  const simplify = new URLSearchParams({ query: `${keywords} internship`.trim() });
   return [
+    { name: "Handshake", url: `https://app.joinhandshake.com/stu/postings?${new URLSearchParams({ query: words })}` },
     { name: "LinkedIn", url: `https://www.linkedin.com/jobs/search/?${linkedin}` },
-    { name: "Simplify", url: `https://simplify.jobs/jobs?${simplify}` },
+    { name: "Indeed", url: `https://www.indeed.com/jobs?${new URLSearchParams({ q: words, l: f.remote && !f.location.trim() ? "Remote" : place })}` },
+    { name: "Simplify", url: `https://simplify.jobs/jobs?${new URLSearchParams({ q: words })}` },
   ];
 }
 

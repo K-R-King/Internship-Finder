@@ -14,7 +14,7 @@ export default function Home() {
             Internship <span className="text-gold">Finder</span>
           </h1>
           <p className="mt-3 max-w-xl text-blue-100">
-            Open internships for university students, gathered from company job boards and student-run lists into one search.
+            U.S. internships and entry-level jobs for university students, gathered from company job boards and public job lists into one search.
           </p>
         </div>
       </header>
