@@ -28,6 +28,8 @@ jobs:
           node-version: 22
       - name: Bring back the last listings, for dates added and the saved lookups
         run: |
+          # the listings aren't on main, so a fresh checkout has no public/ folder
+          mkdir -p public data
           if git fetch --depth=1 origin data; then
             mkdir -p last
             git --work-tree=last checkout FETCH_HEAD -- .

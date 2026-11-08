@@ -2,7 +2,7 @@
 // public/internships.json holds internships and entry-level jobs, which the page loads first, and jobs-mid.json
 // and jobs-senior.json the rest, loaded when someone asks for them.
 // A source that fails is skipped and reported; if the result shrinks by more than half, the old files are kept.
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import {
   dedupe, fromAshby, fromGreenhouse, fromLever, fromMuse, fromNewGrad, fromSimplify, fromSmartRecruiters, fromVansh,
   fromWorkday, isHttpUrl, isShortLink, jobType, keep, pageOf, parseBoardLink, parseCareerSite, usOnly, withoutEndedTerms,
@@ -15,6 +15,9 @@ const COMPANY_SIZES = new URL("../data/company-sizes.json", import.meta.url);  /
 const SHORT_LINKS = new URL("../data/short-links.json", import.meta.url);  // short link -> where it goes
 const HEADERS = { "User-Agent": "internship-finder" };
 const curated = JSON.parse(readFileSync(new URL("../data/boards.json", import.meta.url)));
+
+// the listings live on the "data" branch, so a fresh checkout has no public/ folder to write them to
+mkdirSync(new URL("../public/", import.meta.url), { recursive: true });
 
 const LISTS = [
   { name: "SimplifyJobs list", url: "https://raw.githubusercontent.com/SimplifyJobs/Summer2027-Internships/dev/.github/scripts/listings.json", convert: fromSimplify },
