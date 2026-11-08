@@ -14,7 +14,7 @@ const DATA = {
     listing("b", "Globex", "Accounting Intern", { field: "Business & Finance", terms: ["Fall 2027"], locations: ["Remote"] }),
     listing("c", "Initech", "PhD Research Intern", { gradOnly: true, field: "AI & Data" }),
     listing("d", "Umbrella", "Hardware Intern", { sponsorship: "citizens", field: "Hardware", locations: ["Boston, MA"] }),
-    listing("e", "Hooli", "New Grad Engineer", { type: "entry", locations: ["Los Angeles, CA"], terms: [], employees: 1500 }),
+    listing("e", "Hooli", "New Grad Engineer", { type: "entry", locations: ["Los Angeles, CA"], terms: [], employees: 1500, band: 5 }),
     ...Array.from({ length: 60 }, (_, i) => listing(`x${i}`, "Bulk Co", `Filler Intern ${i}`)),
   ],
 };
@@ -211,11 +211,11 @@ test("a level in the address opens it", async ({ page }) => {
 
 test("filters by company size, and shows the size", async ({ page }) => {
   await open(page);
-  await page.getByLabel("Company size", { exact: true }).selectOption({ label: "1,000\u20132,000 employees (1)" });
+  await page.getByLabel("Company size", { exact: true }).selectOption({ label: "1,001\u20135,000 employees (1)" });
   await expect(rows(page)).toHaveCount(1);
   await expect(rows(page)).toContainText("Hooli \u00b7 1,500 employees");
   await page.getByLabel("Company size", { exact: true }).selectOption({ index: 1 });
-  await expect(page.getByText("Company sizes are only known for some")).toBeVisible();
+  await expect(page.getByText("Company sizes are known for most companies, but not all.")).toBeVisible();
 });
 
 test("saved senior jobs stay listed, and aren't called closed", async ({ page }) => {

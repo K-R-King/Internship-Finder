@@ -7,6 +7,7 @@ U.S. internships and entry-level jobs for university students, gathered from com
 - **One list from many sources**, with the same posting from different sources merged, and ended terms and long-abandoned listings left out.
 - **Search and filters:** company or role, location, field, term, level, open to undergrads, remote, permanent residents, and visa sponsorship. Results update as you change them, or press Search.
 - **U.S. only:** a listing keeps only its U.S. places, and is left out if it has none.
+- **Company size:** an exact count from Wikidata when there is one, otherwise a band from [BigPicture's free company dataset](https://huggingface.co/datasets/bigpictureio/companies-2023-q4-sm) (ODC-BY, late 2023). That dataset is matched by company name: of the companies sharing a name, the largest U.S. one is taken, and a band too small for a company's number of openings is dropped. Checked against Wikidata, about 7 in 10 land in the right band, so sizes are approximate.
 - **Saved and Applied tracking**, stored in your browser. Tracked listings stay after they close, marked "No longer listed".
 - **New since your last visit:** listings added since you last came by are labeled, with a filter to show only those.
 - **Searches in the address:** `?q=security&field=Software&location=LA` opens that search, which is how the EECS Planner links here.

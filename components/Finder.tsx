@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  age, extraLevels, filtersFromUrl, inSize, isNew, LEVEL_NAMES, LEVELS, matches, NO_FILTERS, readTracked, searchElsewhere, SIZES,
+  age, companySize, extraLevels, filtersFromUrl, inSize, isNew, LEVEL_NAMES, LEVELS, matches, NO_FILTERS, readTracked, searchElsewhere, SIZES,
   termsIn, type Data, type Filters, type Internship, type Status, type Tracked,
 } from "@/lib/internships";
 
@@ -99,7 +99,7 @@ function Row({ item, status, closed, fresh, updated, onTrack }: {
       <div className="min-w-0 flex-1 space-y-1">
         <p className="text-sm text-slate-600 dark:text-slate-300">
           <span className="font-semibold text-slate-800 dark:text-slate-100">{item.company}</span>
-          {item.employees ? ` · ${item.employees.toLocaleString()} employees` : ""}
+          {companySize(item) ? ` · ${companySize(item)}` : ""}
         </p>
         <h3 className="font-semibold text-berkeley dark:text-blue-200">{item.title}</h3>
         <p className="text-xs text-slate-600 dark:text-slate-300">
@@ -207,7 +207,7 @@ export default function Finder() {
   const open = useMemo(() => new Set(everything.map((i) => i.url)), [everything]);
   const fields = useMemo(() => [...new Set(everything.map((i) => i.field))].sort(), [everything]);
   const terms = useMemo(() => termsIn(everything), [everything]);
-  const sizeCounts = useMemo(() => SIZES.map((size) => everything.filter((i) => inSize(i.employees, size)).length), [everything]);
+  const sizeCounts = useMemo(() => SIZES.map((_, size) => everything.filter((i) => inSize(i, size)).length), [everything]);
 
   function change(next: Partial<Filters>) {
     const changed = { ...filters, ...next };
@@ -332,7 +332,7 @@ export default function Finder() {
             {emptyList ? `Nothing ${applied.view === "saved" ? "saved" : "marked as applied"} yet` : "Nothing matches those filters"}
           </p>
           {applied.size !== "" && !emptyList && (
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Company sizes are only known for some, mostly large, companies.</p>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Company sizes are known for most companies, but not all.</p>
           )}
           <button type="button" onClick={() => { setFilters(NO_FILTERS); update(NO_FILTERS, 0); }} className="mt-3 rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-berkeley">
             {emptyList ? "See all jobs" : "Clear filters"}
@@ -349,7 +349,7 @@ export default function Finder() {
       <footer className="pt-6 text-center text-xs text-slate-600 dark:text-slate-300">
         <p>Updated {new Date(data.updated * 1000).toLocaleDateString(undefined, { dateStyle: "medium" })} from {data.sources.filter((s) => s.ok || s.count).map((s) => s.name).join(", ")}.</p>
         <p className="mt-1">
-          Not every job is here, so try the other sites too. Company sizes come from Wikidata and are known only for some companies, and few
+          Not every job is here, so try the other sites too. Company sizes come from Wikidata and BigPicture&apos;s free company dataset (ODC-BY, late 2023), are approximate and not known for every company, and few
           listings state work authorization, so check each one. Always confirm details on the company&apos;s own page.
         </p>
       </footer>

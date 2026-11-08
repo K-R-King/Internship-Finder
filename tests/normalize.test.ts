@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { extraLevels, filtersFromUrl, inPlace, isNew, matches, NO_FILTERS, readTracked, searchElsewhere, SIZES, termsIn, type Internship } from "@/lib/internships";
-import { dedupe, fieldOf, fromGreenhouse, fromMuse, fromNewGrad, fromSimplify, fromSmartRecruiters, fromVansh, fromWorkday, isEntryLevel, isInternship, shortId, isUSPlace, jobType, keep, parseBoardLink, parseCareerSite, termHasPassed, termsIn as termsInTitle, usOnly, withoutEndedTerms, withYear } from "@/lib/normalize.mjs";
+import { companySize, extraLevels, filtersFromUrl, inPlace, isNew, matches, NO_FILTERS, readTracked, searchElsewhere, SIZES, termsIn, type Internship } from "@/lib/internships";
+import { dedupe, fieldOf, fromGreenhouse, fromMuse, fromNewGrad, fromSimplify, fromSmartRecruiters, fromVansh, fromWorkday, isEntryLevel, isInternship, shortId, isUSPlace, jobType, keep, parseBoardLink, parseCareerSite, termHasPassed, termsIn as termsInTitle, usOnly, withoutEndedTerms, withYear, BANDS, sizeBand } from "@/lib/normalize.mjs";
+import { csvFields, matchScore } from "../scripts/company-bands.mjs";
+import { simpleCompany } from "@/lib/normalize.mjs";
 
 const NOV_2026 = new Date("2026-11-06");
 const simplifyRow = {
@@ -380,10 +382,16 @@ describe("filters", () => {
   });
 
   it("filters by company size, leaving out companies of unknown size", () => {
-    const filters = { ...NO_FILTERS, size: String(SIZES.findIndex((s) => s.min === 1000)) };
-    expect(matches(job(["Austin, TX"], { employees: 1500 }), filters)).toBe(true);
-    expect(matches(job(["Austin, TX"], { employees: 2000 }), filters)).toBe(false);
+    const filters = { ...NO_FILTERS, size: String(SIZES.findIndex((s) => s.label.startsWith("1,001"))) };
+    expect(matches(job(["Austin, TX"], { band: 5 }), filters)).toBe(true);
+    expect(matches(job(["Austin, TX"], { band: 6 }), filters)).toBe(false);
     expect(matches(job(["Austin, TX"]), filters)).toBe(false);
+  });
+
+  it("shows an exact size when it's known, otherwise the band", () => {
+    expect(companySize(job([], { employees: 1500, band: 5 }))).toBe("1,500 employees");
+    expect(companySize(job([], { band: 1 }))).toBe("about 11\u201350 employees");
+    expect(companySize(job([]))).toBe("");
   });
 
   it("filters by level, treating older saved listings as internships", () => {
@@ -505,5 +513,49 @@ describe("shortId", () => {
     expect(id.length).toBeLessThanOrEqual(14);
     const ids = new Set(Array.from({ length: 100000 }, (_, i) => shortId(`Greenhouse:${i}`)));
     expect(ids.size).toBe(100000);
+  });
+});
+
+describe("company size", () => {
+  it("an exact count picks its band", () => {
+    expect(BANDS[sizeBand(8000, "1-10", 500)!].id).toBe("5K-10K");
+    expect(BANDS[sizeBand(10, undefined, 0)!].id).toBe("1-10");
+    expect(BANDS[sizeBand(50000, undefined, 0)!].id).toBe("10K+");
+  });
+
+  it("uses the dataset's band when nothing better is known", () => {
+    expect(BANDS[sizeBand(undefined, "51-200", 12)!].id).toBe("51-200");
+  });
+
+  it("drops a band too small for the company's openings, since that's another company with the same name", () => {
+    expect(sizeBand(undefined, "1-10", 40)).toBeNull();
+    expect(sizeBand(undefined, "11-50", 26)).toBeNull();
+    expect(sizeBand(undefined, "11-50", 25)).toBe(1);
+    expect(sizeBand(undefined, "10K+", 5000)).toBe(7);
+  });
+
+  it("knows nothing without a count or a band", () => {
+    expect(sizeBand(undefined, null, 3)).toBeNull();
+    expect(sizeBand(undefined, "nonsense", 3)).toBeNull();
+  });
+
+  it("matches the filter's labels one to one", () => {
+    expect(BANDS).toHaveLength(SIZES.length);
+  });
+
+  it("reads quoted CSV fields", () => {
+    expect(csvFields('company/acme,"Acme, Inc.",acme.com,"He said ""hi""",11-50')).toEqual(["company/acme", "Acme, Inc.", "acme.com", 'He said "hi"', "11-50"]);
+  });
+
+  it("prefers the largest U.S. company of that name, then the largest anywhere", () => {
+    const score = (size: string, country: string) => matchScore({ size, country_code: country });
+    expect(score("10K+", "us")).toBeGreaterThan(score("1-10", "us"));
+    expect(score("1-10", "US")).toBeGreaterThan(score("10K+", "gb"));
+    expect(score("nonsense", "us")).toBe(-1);
+  });
+
+  it("treats Corning and Corning Incorporated as one company", () => {
+    expect(simpleCompany("Corning Incorporated")).toBe(simpleCompany("Corning"));
+    expect(simpleCompany("Acme Limited")).toBe(simpleCompany("Acme"));
   });
 });
