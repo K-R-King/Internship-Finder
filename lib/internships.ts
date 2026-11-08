@@ -8,7 +8,8 @@ export interface Internship {
   field: string;
   gradOnly: boolean;       // for graduate students
   type?: Level;            // older saved listings don't have one, and are internships
-  employees?: number;      // the company's size, when it's known
+  employees?: number;      // the company's exact size, when it's known
+  band?: number;           // the company's size band, an index into SIZES, when it's known
   sponsorship: "offers" | "none" | "citizens" | null;  // null when the listing doesn't say
   posted: number | null;   // seconds since 1970
   added?: number;          // when it first appeared here, seconds since 1970
@@ -33,7 +34,7 @@ export interface Filters {
   field: string;     // "" means any
   term: string;      // e.g. "Summer 2027"; "" means any
   level: Level | "" | "all";  // "" means internships and entry level
-  size: string;               // index into SIZES; "" means any
+  size: string;               // index into SIZES (one per size band); "" means any
   undergrad: boolean;
   remote: boolean;
   sponsorship: boolean;  // hide listings that rule out visa sponsorship
@@ -62,19 +63,25 @@ export function extraLevels(level: Filters["level"]): ("mid" | "senior")[] {
   return level === "all" ? ["mid", "senior"] : level === "mid" || level === "senior" ? [level] : [];
 }
 
-export const SIZES: { label: string; min: number; max: number }[] = [
-  { label: "5\u201310 employees", min: 5, max: 10 },
-  { label: "10\u201350 employees", min: 10, max: 50 },
-  { label: "50\u2013100 employees", min: 50, max: 100 },
-  { label: "100\u2013200 employees", min: 100, max: 200 },
-  { label: "200\u2013500 employees", min: 200, max: 500 },
-  { label: "500\u20131,000 employees", min: 500, max: 1000 },
-  { label: "1,000\u20132,000 employees", min: 1000, max: 2000 },
-  { label: "2,000+ employees", min: 2000, max: Infinity },
+// the bands of the company dataset (BANDS in normalize.mjs), in the same order
+export const SIZES: { label: string }[] = [
+  { label: "1\u201310 employees" },
+  { label: "11\u201350 employees" },
+  { label: "51\u2013200 employees" },
+  { label: "201\u2013500 employees" },
+  { label: "501\u20131,000 employees" },
+  { label: "1,001\u20135,000 employees" },
+  { label: "5,001\u201310,000 employees" },
+  { label: "10,000+ employees" },
 ];
 
-export const inSize = (employees: number | undefined, size: (typeof SIZES)[number]) =>
-  employees !== undefined && employees >= size.min && employees < size.max;
+export const inSize = (item: Internship, size: number) => item.band === size;
+
+/** How big the company is, for a job card: the exact count when it's known, otherwise its band. */
+export function companySize(item: Internship): string {
+  if (item.employees) return `${item.employees.toLocaleString()} employees`;
+  return item.band !== undefined ? `about ${SIZES[item.band].label}` : "";
+}
 
 const SEASON_ORDER = ["Spring", "Summer", "Fall", "Winter"];
 
@@ -143,7 +150,7 @@ export function matches(item: Internship, f: Filters, since: number | null = nul
   }
   const level = item.type ?? "internship";
   if (f.level === "" ? level !== "internship" && level !== "entry" : f.level !== "all" && level !== f.level) return false;
-  if (f.size !== "" && !inSize(item.employees, SIZES[Number(f.size)])) return false;
+  if (f.size !== "" && !inSize(item, Number(f.size))) return false;
   if (f.field && item.field !== f.field) return false;
   if (f.term && !item.terms.includes(f.term)) return false;
   if (f.undergrad && item.gradOnly) return false;

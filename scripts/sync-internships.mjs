@@ -3,15 +3,20 @@
 // and jobs-senior.json the rest, loaded when someone asks for them.
 // A source that fails is skipped and reported; if the result shrinks by more than half, the old files are kept.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readBands } from "./company-bands.mjs";
 import {
   dedupe, fromAshby, fromGreenhouse, fromLever, fromMuse, fromNewGrad, fromSimplify, fromSmartRecruiters, fromVansh,
   fromWorkday, isHttpUrl, isShortLink, jobType, keep, pageOf, parseBoardLink, parseCareerSite, usOnly, withoutEndedTerms,
+  simpleCompany, sizeBand,
 } from "../lib/normalize.mjs";
 
 const OUTPUT = new URL("../public/internships.json", import.meta.url);
 const MID_OUTPUT = new URL("../public/jobs-mid.json", import.meta.url);
 const SENIOR_OUTPUT = new URL("../public/jobs-senior.json", import.meta.url);
 const COMPANY_SIZES = new URL("../data/company-sizes.json", import.meta.url);  // company -> employees, null if unknown
+const COMPANY_BANDS = new URL("../data/company-bands.json", import.meta.url);  // company -> dataset size band, null if unknown
+// the company dataset is a 630 MB download, so it's read again only once this many new companies have appeared
+const NEW_COMPANIES_FOR_BANDS = 100;
 const SHORT_LINKS = new URL("../data/short-links.json", import.meta.url);  // short link -> where it goes
 const HEADERS = { "User-Agent": "internship-finder" };
 const curated = JSON.parse(readFileSync(new URL("../data/boards.json", import.meta.url)));
@@ -156,6 +161,22 @@ async function readMuse() {
   return items;
 }
 
+/** Size bands from BigPicture's company dataset, kept between runs and read again when enough companies are new. */
+async function companyBands(companies) {
+  const known = existsSync(COMPANY_BANDS) ? JSON.parse(readFileSync(COMPANY_BANDS)) : {};
+  const unknown = companies.filter((name) => !(name in known));
+  if (unknown.length >= NEW_COMPANIES_FOR_BANDS) {
+    try {
+      Object.assign(known, await readBands(unknown, simpleCompany));
+      console.log(`Company dataset: looked up ${unknown.length} companies`);
+    } catch (err) {
+      console.warn(`Company dataset failed: ${err.message}`);
+    }
+  }
+  writeFileSync(COMPANY_BANDS, JSON.stringify(known));
+  return known;
+}
+
 /** Employee counts from Wikidata, kept between runs. Most small companies aren't there, so they stay unknown. */
 async function companySizes(companies) {
   const known = existsSync(COMPANY_SIZES) ? JSON.parse(readFileSync(COMPANY_SIZES)) : {};
@@ -273,10 +294,17 @@ async function main() {
     throw new Error(`Only ${open.length} listings, down from ${previous.length}. Keeping the old files.`);
   }
 
-  const sizes = await companySizes([...new Set(open.map((item) => item.company))]);
+  const companies = [...new Set(open.map((item) => item.company))];
+  const sizes = await companySizes(companies);
+  const datasetBands = await companyBands(companies);
+  const openings = {};
+  for (const item of open) openings[item.company] = (openings[item.company] ?? 0) + 1;
   const now = Math.round(Date.now() / 1000);
   const items = withDatesAdded(open, previous, now)
-    .map((item) => (sizes[item.company] ? { ...item, employees: sizes[item.company] } : item))
+    .map((item) => {
+      const band = sizeBand(sizes[item.company], datasetBands[item.company], openings[item.company]);
+      return { ...item, ...(sizes[item.company] && { employees: sizes[item.company] }), ...(band !== null && { band }) };
+    })
     .sort((a, b) => (b.posted ?? 0) - (a.posted ?? 0));
   const ofLevels = (...levels) => items.filter((item) => levels.includes(item.type));
   writeFileSync(OUTPUT, JSON.stringify({ updated: now, sources: report, items: ofLevels("internship", "entry") }));
@@ -284,7 +312,7 @@ async function main() {
   writeFileSync(SENIOR_OUTPUT, JSON.stringify({ items: ofLevels("senior") }));
   console.log(`${items.length} jobs from ${collected.length} listings: ${stillOpen.length - inUS.length} outside the U.S., ${merged.length - open.length} closed on their boards`, report);
   console.log("by level", Object.fromEntries(["internship", "entry", "mid", "senior"].map((level) => [level, ofLevels(level).length])));
-  console.log(`${items.filter((item) => item.employees).length} with a company size; ${items.filter((item) => isShortLink(item.url)).length} short links left`);
+  console.log(`${items.filter((item) => item.band !== undefined).length} with a company size; ${items.filter((item) => isShortLink(item.url)).length} short links left`);
 
   // the listings are saved, but a missing list is worth knowing about
   if (report.some((source) => !source.ok && source.name !== "Workday" && source.name !== "SmartRecruiters")) process.exitCode = 1;

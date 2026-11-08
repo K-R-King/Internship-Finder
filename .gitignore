@@ -53,3 +53,4 @@ next-env.d.ts
 /public/jobs-senior.json
 /data/short-links.json
 /data/company-sizes.json
+/data/company-bands.json
