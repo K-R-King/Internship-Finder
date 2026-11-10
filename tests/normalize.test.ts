@@ -391,6 +391,7 @@ describe("filters", () => {
   it("shows an exact size when it's known, otherwise the band", () => {
     expect(companySize(job([], { employees: 1500, band: 5 }))).toBe("1,500 employees");
     expect(companySize(job([], { band: 1 }))).toBe("about 11\u201350 employees");
+    expect(companySize(job([], { band: 7 }))).toBe("10,000+ employees");
     expect(companySize(job([]))).toBe("");
   });
 

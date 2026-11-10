@@ -80,7 +80,9 @@ export const inSize = (item: Internship, size: number) => item.band === size;
 /** How big the company is, for a job card: the exact count when it's known, otherwise its band. */
 export function companySize(item: Internship): string {
   if (item.employees) return `${item.employees.toLocaleString()} employees`;
-  return item.band !== undefined ? `about ${SIZES[item.band].label}` : "";
+  if (item.band === undefined || !SIZES[item.band]) return "";
+  const label = SIZES[item.band].label;
+  return label.includes("+") ? label : `about ${label}`;  // "10,000+ employees" is already a rough number
 }
 
 const SEASON_ORDER = ["Spring", "Summer", "Fall", "Winter"];
