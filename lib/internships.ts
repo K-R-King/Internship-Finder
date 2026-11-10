@@ -69,6 +69,7 @@ export const MAJORS: { label: string; fields?: string[]; title?: RegExp }[] = [
   { label: "Electrical Engineering", title: CIRCUITS },
   { label: "Computer Engineering", fields: ["Software"], title: /computer engineer|embedded|firmware|hardware|fpga|asic|silicon/i },
   { label: "Data Science", fields: ["AI & Data"], title: /data science/i },
+  { label: "Artificial Intelligence (AI)", title: /artificial intelligence|machine learning|deep learning|computer vision|\b(ai|ml|nlp|llm)\b/i },
   { label: "Statistics", fields: ["AI & Data"], title: /statistic|actuar|biostat/i },
   { label: "Mathematics", fields: ["Quant"], title: /math|actuar|statistic/i },
   { label: "Mechanical Engineering", title: /mechanical|robotics|manufactur/i },

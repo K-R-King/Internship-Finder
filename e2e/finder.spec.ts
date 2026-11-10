@@ -240,6 +240,19 @@ test("there are no shortcut buttons that look like filters", async ({ page }) =>
   }
 });
 
+test("every menu keeps its name after something is picked", async ({ page }) => {
+  await open(page);
+  await expect(menu(page, LEVELS)).toContainText(`${LEVELS}: Internships`);
+  await pick(page, "Major", "Artificial Intelligence (AI)");
+  await expect(menu(page, "Major")).toContainText("Major: Artificial Intelligence (AI)");
+  await pick(page, "Degree", "Undergrad Students");
+  await expect(menu(page, "Degree")).toContainText("Degree: Undergrad Students");
+  await pick(page, "Company size", /^11/);
+  await expect(menu(page, "Company size")).toContainText("Company size: 11");
+  await pickOne(page, "Date posted", "1 Week");
+  await expect(menu(page, "Date posted")).toContainText("Date posted: 1 Week");
+});
+
 test("the term menu is called Applying for term", async ({ page }) => {
   await open(page);
   await expect(page.getByRole("button", { name: /^Term:/ })).toHaveCount(0);
