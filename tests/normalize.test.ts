@@ -730,7 +730,7 @@ describe("rowsFromTable", () => {
       "not a table https://jobs.lever.co/other",
     ].join("\n");
     const rows = rowsFromTable(text);
-    expect(rows.filter((r) => /greenhouse|lever/.test(r.url))).toEqual([
+    expect(rows.filter((r: { url: string }) => /greenhouse|lever/.test(r.url))).toEqual([
       { url: "https://boards.greenhouse.io/figma/jobs/1?gh_jid=1", company_name: "Figma" },
       { url: "https://jobs.lever.co/acme/1", company_name: "Acme" },
     ]);
