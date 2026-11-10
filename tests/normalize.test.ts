@@ -598,6 +598,12 @@ describe("levels kept in their own files", () => {
     expect(new URL(searchElsewhere(NO_FILTERS)[1].url).searchParams.get("f_TPR")).toBeNull();
   });
 
+  it("links to Built In with the search", () => {
+    const builtIn = (filters: object) => searchElsewhere({ ...NO_FILTERS, ...filters }).find((site) => site.name === "Built In")!.url;
+    expect(builtIn({ query: "data analyst" })).toBe("https://builtin.com/jobs?search=data+analyst+internship");
+    expect(builtIn({ level: [] })).toBe("https://builtin.com/jobs");
+  });
+
   it("names a field on other sites only when one is picked", () => {
     const words = (major: string[]) => new URL(searchElsewhere({ ...NO_FILTERS, major })[1].url).searchParams.get("keywords");
     expect(words(["EECS"])).toBe("EECS internship");

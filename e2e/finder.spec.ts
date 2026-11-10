@@ -495,6 +495,14 @@ test("LinkedIn and Simplify links carry the current search", async ({ page }) =>
   expect(simplify.searchParams.get("q")).toBe("data analyst internship");
 });
 
+test("Built In opens the current search in a new tab", async ({ page }) => {
+  await open(page);
+  await page.getByLabel("Search by company or role").fill("data analyst");
+  const link = page.getByRole("link", { name: /on Built In/ });
+  await expect(link).toHaveAttribute("href", "https://builtin.com/jobs?search=data+analyst+internship");
+  await expect(link).toHaveAttribute("target", "_blank");
+});
+
 test("says so when the data can't load", async ({ page }) => {
   await page.route("**/internships.json", (route) => route.fulfill({ status: 500 }));
   await page.goto("/");
