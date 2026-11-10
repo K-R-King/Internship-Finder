@@ -240,7 +240,7 @@ function Row({ item, index, status, closed, fresh, updated, onTrack }: {
 }
 
 /** A pill that opens a list of choices: checkboxes for any number of them, or radio buttons with `single`. */
-function Menu({ caption, options, picked, onChange, single = false, disabled = false, hint }: {
+function Menu({ caption, options, picked, onChange, single = false, disabled = false, hint, keepCaption = false }: {
   caption: string;
   options: { value: string; label: string }[];
   picked: string[];
@@ -248,6 +248,7 @@ function Menu({ caption, options, picked, onChange, single = false, disabled = f
   single?: boolean;
   disabled?: boolean;
   hint?: string;
+  keepCaption?: boolean;  // for a choice that needs its label to make sense: "Applying for term: Spring 2027"
 }) {
   const [open, setOpen] = useState(false);
   const [flip, setFlip] = useState(false);  // opens leftward when there's no room on the right
@@ -255,7 +256,7 @@ function Menu({ caption, options, picked, onChange, single = false, disabled = f
   const button = useRef<HTMLButtonElement>(null);
   const id = useId();
   const nameOf = (value: string) => options.find((o) => o.value === value)?.label ?? value;
-  const summary = picked.length === 0 ? caption : picked.length === 1 ? nameOf(picked[0]) : `${caption} (${picked.length})`;
+  const summary = picked.length === 0 ? caption : picked.length === 1 ? `${keepCaption ? `${caption}: ` : ""}${nameOf(picked[0])}` : `${caption} (${picked.length})`;
 
   useEffect(() => {
     if (!open) return;
@@ -295,7 +296,7 @@ function Menu({ caption, options, picked, onChange, single = false, disabled = f
         aria-controls={open ? id : undefined}
         aria-label={`${caption}: ${picked.length === 0 ? "any" : picked.length === 1 ? nameOf(picked[0]) : `${picked.length} selected`}`}
         onClick={toggle}
-        className={`${pill} ${picked.length ? pillOn : pillOff} max-w-56 disabled:cursor-not-allowed disabled:opacity-60`}
+        className={`${pill} ${picked.length ? pillOn : pillOff} max-w-72 disabled:cursor-not-allowed disabled:opacity-60`}
       >
         <span className="truncate">{summary}</span>
         <Icon name="down" className={`h-3.5 w-3.5 transition ${open ? "rotate-180" : ""}`} />
@@ -642,7 +643,7 @@ export default function Finder() {
           )}
           <Menu caption="Major" options={MAJORS.map((m) => ({ value: m.label, label: m.label }))} picked={filters.major} onChange={(major) => change({ major })} />
           {showTerm && (
-            <Menu caption="Applying for term" options={[...new Set([...terms, ...filters.term])].map((t) => ({ value: t, label: t }))} picked={filters.term} onChange={(term) => change({ term })} />
+            <Menu caption="Applying for term" keepCaption options={[...new Set([...terms, ...filters.term])].map((t) => ({ value: t, label: t }))} picked={filters.term} onChange={(term) => change({ term })} />
           )}
           <Menu
             caption="Degree"
