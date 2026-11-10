@@ -294,7 +294,7 @@ function Menu({ caption, all, options, picked, onChange, single = false, disable
         title={disabled ? hint : undefined}
         aria-expanded={open}
         aria-controls={open ? id : undefined}
-        aria-label={`${caption}: ${picked.length === 0 ? "any" : picked.length === 1 ? nameOf(picked[0]) : `${picked.length} selected`}`}
+        aria-label={`${caption}: ${picked.length === 0 ? all : picked.length === 1 ? nameOf(picked[0]) : `${picked.length} selected`}`}
         onClick={toggle}
         className={`${pill} ${picked.length ? pillOn : pillOff} max-w-[calc(100vw-5.5rem)] disabled:cursor-not-allowed disabled:opacity-60`}
       >

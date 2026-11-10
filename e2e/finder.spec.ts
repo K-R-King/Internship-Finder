@@ -301,7 +301,7 @@ test("date posted narrows to recent listings", async ({ page }) => {
   await expect(page.getByText("64 internships, newest first")).toBeVisible();
   await expect(page.getByRole("button", { name: "Remove Posted within 1 Week" })).toBeVisible();
   await pickOne(page, "Date posted", "Any time");
-  await expect(menu(page, "Date posted")).toHaveAccessibleName("Date posted: any");
+  await expect(menu(page, "Date posted")).toHaveAccessibleName("Date posted: All Dates Posted");
 });
 
 test("a graduation date removes internships that start after it", async ({ page }) => {
@@ -313,7 +313,7 @@ test("a graduation date removes internships that start after it", async ({ page 
   await pickOne(page, "Graduation date", "December 2027");
   await expect(page.getByText("64 internships, newest first")).toBeVisible();
   await pickOne(page, "Graduation date", "Any graduation date");
-  await expect(menu(page, "Graduation date")).toHaveAccessibleName("Graduation date: any");
+  await expect(menu(page, "Graduation date")).toHaveAccessibleName("Graduation date: All Graduation Dates");
 });
 
 test("verified companies are marked, and can be the only ones shown", async ({ page }) => {
