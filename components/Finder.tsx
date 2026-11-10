@@ -255,7 +255,7 @@ function Menu({ caption, options, picked, onChange, single = false, disabled = f
   const button = useRef<HTMLButtonElement>(null);
   const id = useId();
   const nameOf = (value: string) => options.find((o) => o.value === value)?.label ?? value;
-  const summary = picked.length === 0 ? caption : picked.length === 1 ? nameOf(picked[0]) : `${caption} (${picked.length})`;
+  const summary = picked.length === 0 ? caption : picked.length === 1 ? `${caption}: ${nameOf(picked[0])}` : `${caption} (${picked.length})`;
 
   useEffect(() => {
     if (!open) return;
@@ -295,7 +295,7 @@ function Menu({ caption, options, picked, onChange, single = false, disabled = f
         aria-controls={open ? id : undefined}
         aria-label={`${caption}: ${picked.length === 0 ? "any" : picked.length === 1 ? nameOf(picked[0]) : `${picked.length} selected`}`}
         onClick={toggle}
-        className={`${pill} ${picked.length ? pillOn : pillOff} max-w-56 disabled:cursor-not-allowed disabled:opacity-60`}
+        className={`${pill} ${picked.length ? pillOn : pillOff} max-w-[calc(100vw-5.5rem)] disabled:cursor-not-allowed disabled:opacity-60`}
       >
         <span className="truncate">{summary}</span>
         <Icon name="down" className={`h-3.5 w-3.5 transition ${open ? "rotate-180" : ""}`} />

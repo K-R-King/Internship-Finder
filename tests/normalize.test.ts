@@ -423,6 +423,10 @@ describe("filters", () => {
     ["Registered Nurse", "Healthcare", "Nursing", true],
     ["Biophysics Researcher", "Other", "Physics", true],
     ["Backend Intern", "Software", "Not a major", false],
+    ["Machine Learning Intern", "AI & Data", "Artificial Intelligence (AI)", true],
+    ["AI Engineer", "AI & Data", "Artificial Intelligence (AI)", true],
+    ["Data Analyst Intern", "AI & Data", "Artificial Intelligence (AI)", false],
+    ["Retail Associate", "Other", "Artificial Intelligence (AI)", false],
   ])("%s (%s) for %s: %s", (title, field, major, fits) => {
     expect(fitsMajor({ title, field } as unknown as Internship, major)).toBe(fits);
   });
