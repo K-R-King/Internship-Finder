@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { companySize, extraLevels, filtersFromUrl, fitsGraduation, graduationOptions, graduationYears, inPlace, isNew, isVerified, matches, NO_FILTERS, readTracked, searchElsewhere, SIZES, termsIn, type Internship, type LevelChoice } from "@/lib/internships";
+import { companySize, extraLevels, filtersFromUrl, fitsMajor, fitsGraduation, graduationOptions, graduationYears, inPlace, isNew, isVerified, matches, NO_FILTERS, readTracked, searchElsewhere, SIZES, termsIn, type Internship, type Level } from "@/lib/internships";
 import { indexPlaces, locate, milesBetween, withinMiles, type PlaceTable } from "@/lib/places";
 import { dedupe, fieldOf, fromGreenhouse, fromMuse, fromNewGrad, fromSimplify, fromSmartRecruiters, fromVansh, fromWorkday, isEntryLevel, isInternship, shortId, isUSPlace, jobType, keep, parseBoardLink, parseCareerSite, termHasPassed, termsIn as termsInTitle, usOnly, withoutEndedTerms, withYear, BANDS, sizeBand } from "@/lib/normalize.mjs";
 import { csvFields, matchScore } from "../scripts/company-bands.mjs";
@@ -264,29 +264,26 @@ describe("what's new", () => {
 });
 
 describe("filtersFromUrl", () => {
-  const items = [{ field: "Software" }] as Internship[];
-
   it("reads a search from the address", () => {
-    expect(filtersFromUrl("?q=security&location=LA&field=Software", items)).toEqual({ query: "security", location: "LA", field: ["Software"] });
+    expect(filtersFromUrl("?q=security&location=LA&field=Software")).toEqual({ query: "security", location: "LA", major: ["Computer Science"] });
   });
 
-  it("reads several fields, and which tab a link wants", () => {
-    const two = [{ field: "Software" }, { field: "Hardware" }] as Internship[];
-    expect(filtersFromUrl("?field=Software&field=Hardware&field=Nope", two)).toEqual({ field: ["Software", "Hardware"] });
-    expect(filtersFromUrl("?kind=jobs", items)).toEqual({ kind: "job" });
-    expect(filtersFromUrl("?kind=job", items)).toEqual({ kind: "job" });
-    expect(filtersFromUrl("?level=mid", items)).toEqual({ kind: "job", level: ["mid"] });
-    expect(filtersFromUrl("?level=grad", items)).toEqual({ kind: "internship", level: ["grad"] });
+  it("reads several fields, and which levels a link wants", () => {
+    expect(filtersFromUrl("?field=Software&field=Hardware&field=Nope")).toEqual({ major: ["Computer Science", "Electrical Engineering"] });
+    expect(filtersFromUrl("?major=EECS&major=Nope")).toEqual({ major: ["EECS"] });
+    expect(filtersFromUrl("?kind=jobs")).toEqual({ level: ["entry", "mid", "senior"] });
+    expect(filtersFromUrl("?level=mid")).toEqual({ level: ["mid"] });
+    expect(filtersFromUrl("?level=nonsense")).toEqual({});
   });
 
-  it("still opens links from before the two tabs", () => {
-    expect(filtersFromUrl("?level=all", items)).toEqual({ kind: "job" });
-    expect(filtersFromUrl("?level=internship", items)).toEqual({});
+  it("opens links that ask for every level", () => {
+    expect(filtersFromUrl("?level=all")).toEqual({ level: [] });
+    expect(filtersFromUrl("?level=internship")).toEqual({ level: ["internship"] });
   });
 
   it("ignores a field no listing has, and an empty address", () => {
-    expect(filtersFromUrl("?field=Nope", items)).toEqual({});
-    expect(filtersFromUrl("", items)).toEqual({});
+    expect(filtersFromUrl("?field=Nope")).toEqual({});
+    expect(filtersFromUrl("")).toEqual({});
   });
 });
 
@@ -395,34 +392,63 @@ describe("filters", () => {
     expect(matches(job(["Austin, TX"]), { ...NO_FILTERS, remote: true })).toBe(false);
   });
 
-  it("keeps internships and jobs on their own tabs", () => {
+  it("shows internships unless other levels are picked", () => {
     expect(matches(job(["Austin, TX"]), NO_FILTERS)).toBe(true);
     expect(matches(job(["Austin, TX"], { type: "entry" }), NO_FILTERS)).toBe(false);
-    expect(matches(job(["Austin, TX"]), { ...NO_FILTERS, kind: "job" })).toBe(false);
-    for (const type of ["entry", "mid", "senior"] as const) {
-      expect(matches(job(["Austin, TX"], { type }), { ...NO_FILTERS, kind: "job" })).toBe(true);
-    }
+    expect(matches(job(["Austin, TX"], { type: "mid" }), { ...NO_FILTERS, level: ["mid", "senior"] })).toBe(true);
+    expect(matches(job(["Austin, TX"]), { ...NO_FILTERS, level: ["mid", "senior"] })).toBe(false);
+    expect(matches(job(["Austin, TX"], { type: "senior" }), { ...NO_FILTERS, level: [] })).toBe(true);
   });
 
   it("lists everything marked on Saved and Applied, whatever its tab", () => {
     expect(matches(job(["Austin, TX"], { type: "senior" }), NO_FILTERS, null, true)).toBe(true);
   });
 
-  it("matches any of the fields picked", () => {
+  it("matches any of the majors picked", () => {
     const software = job(["Austin, TX"], { field: "Software" });
-    expect(matches(software, { ...NO_FILTERS, field: ["Hardware", "Software"] })).toBe(true);
-    expect(matches(software, { ...NO_FILTERS, field: ["Hardware"] })).toBe(false);
+    expect(matches(software, { ...NO_FILTERS, major: ["Physics", "Computer Science"] })).toBe(true);
+    expect(matches(software, { ...NO_FILTERS, major: ["Physics"] })).toBe(false);
     expect(matches(software, NO_FILTERS)).toBe(true);
   });
 
-  it("splits internships by who can apply", () => {
+  it.each([
+    ["Backend Intern", "Software", "EECS", true],
+    ["Backend Intern", "Software", "Computer Science", true],
+    ["Electrical Engineer Intern", "Hardware", "EECS", true],
+    ["Mechanical Engineer Intern", "Hardware", "EECS", false],
+    ["Mechanical Engineer Intern", "Hardware", "Mechanical Engineering", true],
+    ["Staff Accountant", "Business & Finance", "Accounting", true],
+    ["Account Manager", "Business & Finance", "Accounting", false],
+    ["Account Manager", "Business & Finance", "Business", true],
+    ["Registered Nurse", "Healthcare", "Nursing", true],
+    ["Biophysics Researcher", "Other", "Physics", true],
+    ["Backend Intern", "Software", "Not a major", false],
+  ])("%s (%s) for %s: %s", (title, field, major, fits) => {
+    expect(fitsMajor({ title, field } as unknown as Internship, major)).toBe(fits);
+  });
+
+  it("filters undergrad and grad listings separately", () => {
     const open = job(["Austin, TX"], { gradOnly: false });
     const grad = job(["Austin, TX"], { gradOnly: true });
-    expect(matches(open, { ...NO_FILTERS, level: ["undergrad"] })).toBe(true);
-    expect(matches(grad, { ...NO_FILTERS, level: ["undergrad"] })).toBe(false);
-    expect(matches(grad, { ...NO_FILTERS, level: ["grad"] })).toBe(true);
-    expect(matches(open, { ...NO_FILTERS, level: ["grad"] })).toBe(false);
+    expect(matches(open, { ...NO_FILTERS, undergrad: true })).toBe(true);
+    expect(matches(grad, { ...NO_FILTERS, undergrad: true })).toBe(false);
+    expect(matches(grad, { ...NO_FILTERS, forGrads: true })).toBe(true);
+    expect(matches(open, { ...NO_FILTERS, forGrads: true })).toBe(false);
+    expect(matches(open, { ...NO_FILTERS, undergrad: true, forGrads: true })).toBe(true);
+    expect(matches(grad, { ...NO_FILTERS, undergrad: true, forGrads: true })).toBe(true);
   });
+
+  it("filters by date posted, counting from the given day", () => {
+    const now = 100 * 86400;
+    const posted = (daysAgo: number | null) => job(["Austin, TX"], { posted: daysAgo === null ? null : now - daysAgo * 86400 });
+    const week = { ...NO_FILTERS, posted: "7" };
+    expect(matches(posted(6), week, null, false, undefined, now)).toBe(true);
+    expect(matches(posted(7), week, null, false, undefined, now)).toBe(true);
+    expect(matches(posted(8), week, null, false, undefined, now)).toBe(false);
+    expect(matches(posted(null), week, null, false, undefined, now)).toBe(false);
+    expect(matches(posted(null), NO_FILTERS, null, false, undefined, now)).toBe(true);
+  });
+
 
   it("filters by company size, leaving out companies of unknown size", () => {
     const filters = { ...NO_FILTERS, size: [String(SIZES.findIndex((s) => s.label.startsWith("1,001")))] };
@@ -439,8 +465,8 @@ describe("filters", () => {
   });
 
   it("filters by level, treating older saved listings as internships", () => {
-    expect(matches(job(["Austin, TX"], { type: "entry" }), { ...NO_FILTERS, kind: "job", level: ["entry"] })).toBe(true);
-    expect(matches(job(["Austin, TX"], { type: "mid" }), { ...NO_FILTERS, kind: "job", level: ["entry"] })).toBe(false);
+    expect(matches(job(["Austin, TX"], { type: "entry" }), { ...NO_FILTERS, level: ["entry"] })).toBe(true);
+    expect(matches(job(["Austin, TX"], { type: "mid" }), { ...NO_FILTERS, level: ["entry"] })).toBe(false);
     expect(matches(job(["Austin, TX"], { type: undefined }), NO_FILTERS)).toBe(true);
   });
 
@@ -537,22 +563,20 @@ describe("new sources", () => {
 });
 
 describe("levels kept in their own files", () => {
-  it.each<[LevelChoice[], string[]]>([
-    [[], ["mid", "senior"]], [["entry"], []], [["mid"], ["mid"]], [["senior"], ["senior"]], [["entry", "senior"], ["senior"]], [["mid", "senior"], ["mid", "senior"]],
-  ])("jobs at levels %j need %j", (levels, files) => {
-    expect(extraLevels("job", levels)).toEqual(files);
+  it.each<[Level[], string[]]>([
+    [[], ["mid", "senior"]], [["internship"], []], [["entry"], []], [["mid"], ["mid"]], [["senior"], ["senior"]], [["internship", "senior"], ["senior"]], [["mid", "senior"], ["mid", "senior"]],
+  ])("levels %j need %j", (levels, files) => {
+    expect(extraLevels(levels)).toEqual(files);
   });
 
-  it("internships need neither", () => expect(extraLevels("internship", [])).toEqual([]));
-
   it("asks other sites for the right level", () => {
-    const linkedin = (level: LevelChoice[]) => new URL(searchElsewhere({ ...NO_FILTERS, kind: "job", level })[1].url).searchParams;
+    const linkedin = (level: Level[]) => new URL(searchElsewhere({ ...NO_FILTERS, level })[1].url).searchParams;
     expect(linkedin(["mid"]).get("f_E")).toBe("3,4");
     expect(linkedin(["senior"]).get("f_E")).toBe("4,5");
-    expect(linkedin([]).get("f_E")).toBe("2,3,4,5");
+    expect(linkedin(["internship"]).get("f_E")).toBe("1");
+    expect(linkedin([]).get("f_E")).toBeNull();
     expect(linkedin([]).get("keywords")).toBe("jobs");
-    expect(linkedin(["entry", "mid"]).get("f_E")).toBe("2,3,4");
-    expect(new URL(searchElsewhere(NO_FILTERS)[1].url).searchParams.get("f_E")).toBe("1");
+    expect(linkedin(["internship", "entry"]).get("f_E")).toBe("1,2");
   });
 
   it("passes a distance along, up to the 100 miles those sites allow", () => {
@@ -563,10 +587,17 @@ describe("levels kept in their own files", () => {
     expect(new URL(none.url).searchParams.get("distance")).toBeNull();
   });
 
+  it("passes the date posted along, up to the 14 days Indeed allows", () => {
+    const [, linkedin, indeed] = searchElsewhere({ ...NO_FILTERS, posted: "30" });
+    expect(new URL(linkedin.url).searchParams.get("f_TPR")).toBe("r2592000");
+    expect(new URL(indeed.url).searchParams.get("fromage")).toBe("14");
+    expect(new URL(searchElsewhere(NO_FILTERS)[1].url).searchParams.get("f_TPR")).toBeNull();
+  });
+
   it("names a field on other sites only when one is picked", () => {
-    const words = (field: string[]) => new URL(searchElsewhere({ ...NO_FILTERS, field })[1].url).searchParams.get("keywords");
-    expect(words(["Software"])).toBe("Software internship");
-    expect(words(["Software", "Hardware"])).toBe("internship");
+    const words = (major: string[]) => new URL(searchElsewhere({ ...NO_FILTERS, major })[1].url).searchParams.get("keywords");
+    expect(words(["EECS"])).toBe("EECS internship");
+    expect(words(["EECS", "Physics"])).toBe("internship");
   });
 });
 

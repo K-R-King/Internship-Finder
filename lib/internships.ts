@@ -25,8 +25,6 @@ export interface Data {
 }
 
 export type Level = "internship" | "entry" | "mid" | "senior";
-export type Kind = "internship" | "job";
-export type LevelChoice = "undergrad" | "grad" | "entry" | "mid" | "senior";
 export type Status = "saved" | "applied";
 
 /** Keyed by listing page, with a copy of the listing so it stays here after it closes. */
@@ -35,14 +33,16 @@ export type Tracked = Record<string, { status: Status; item: Internship }>;
 export interface Filters {
   query: string;
   location: string;
-  field: string[];   // any of these; empty means any field
+  major: string[];   // any of these, from MAJORS; empty means any
   term: string[];    // any of these, e.g. "Summer 2027"; empty means any term
-  kind: Kind;
-  level: LevelChoice[];  // any of these, within the kind; empty means all of it
+  level: Level[];        // any of these; empty means every level
   size: string[];        // any of these indexes into SIZES; empty means any
   miles: string;         // how far from the location to look; "" means only the place named
   grad: string;          // when the student graduates, "2027-05"; "" means any
   verified: boolean;     // only listings from verified companies
+  posted: string;        // only listings this many days old or newer; "" means any
+  undergrad: boolean;    // leave out listings only for graduate students
+  forGrads: boolean;     // only listings for graduate students
   remote: boolean;
   sponsorship: boolean;  // hide listings that rule out visa sponsorship
   permanent: boolean;    // hide listings only for U.S. citizens
@@ -51,37 +51,77 @@ export interface Filters {
 }
 
 export const NO_FILTERS: Filters = {
-  query: "", location: "", field: [], term: [], kind: "internship", level: [], size: [], miles: "", grad: "", verified: false, remote: false, sponsorship: false, permanent: false, fresh: false, view: "all",
+  query: "", location: "", major: [], term: [], level: ["internship"], size: [], miles: "", grad: "", verified: false, posted: "", undergrad: false, forGrads: false, remote: false, sponsorship: false, permanent: false, fresh: false, view: "all",
 };
 
-// internships have no entry, mid or senior; what sets them apart is who can apply
-export const LEVELS: Record<Kind, { id: LevelChoice; label: string }[]> = {
-  internship: [
-    { id: "undergrad", label: "Open to undergrads" },
-    { id: "grad", label: "Graduate students only" },
-  ],
-  job: [
-    { id: "entry", label: "Entry level" },
-    { id: "mid", label: "Mid level" },
-    { id: "senior", label: "Senior level" },
-  ],
+export const LEVELS: { id: Level; label: string }[] = [
+  { id: "internship", label: "Internships" },
+  { id: "entry", label: "Entry Level Jobs" },
+  { id: "mid", label: "Mid Level Jobs" },
+  { id: "senior", label: "Senior Level Jobs" },
+];
+
+// Listings don't name majors, so each major is the listing categories it leads to, plus words in the job title.
+const CIRCUITS = /electrical|embedded|firmware|fpga|asic|silicon|hardware|semiconductor|circuit|vlsi|signal processing/i;
+export const MAJORS: { label: string; fields?: string[]; title?: RegExp }[] = [
+  { label: "Computer Science", fields: ["Software", "AI & Data"], title: /computer science/i },
+  { label: "EECS", fields: ["Software", "AI & Data"], title: CIRCUITS },
+  { label: "Electrical Engineering", title: CIRCUITS },
+  { label: "Computer Engineering", fields: ["Software"], title: /computer engineer|embedded|firmware|hardware|fpga|asic|silicon/i },
+  { label: "Data Science", fields: ["AI & Data"], title: /data science/i },
+  { label: "Statistics", fields: ["AI & Data"], title: /statistic|actuar|biostat/i },
+  { label: "Mathematics", fields: ["Quant"], title: /math|actuar|statistic/i },
+  { label: "Mechanical Engineering", title: /mechanical|robotics|manufactur/i },
+  { label: "Aerospace Engineering", title: /aerospace|avionics|propulsion|spacecraft|flight (test|software|control)/i },
+  { label: "Civil Engineering", title: /\bcivil\b|structural|geotechnical|construction/i },
+  { label: "Chemical Engineering", title: /chemical|process engineer|petroleum/i },
+  { label: "Bioengineering", title: /biomedical|bioengineer|biotech/i },
+  { label: "Industrial Engineering", title: /industrial engineer|supply chain|operations research|logistics/i },
+  { label: "Materials Science", title: /\bmaterials\b|metallurg/i },
+  { label: "Environmental Science", title: /environmental|sustainab/i },
+  { label: "Business", fields: ["Business & Finance", "Product"] },
+  { label: "Finance", fields: ["Quant"], title: /financ|invest|banking|treasury|\bcredit\b/i },
+  { label: "Accounting", title: /accountant|accounting|\baudit|\btax\b|controller/i },
+  { label: "Economics", title: /econom/i },
+  { label: "Marketing", fields: ["Marketing & Comms"] },
+  { label: "Communications", title: /communications|public relations|journalis|\bcontent\b/i },
+  { label: "Design", fields: ["Design"] },
+  { label: "Health Sciences", fields: ["Healthcare"] },
+  { label: "Nursing", title: /nurse|nursing|\brn\b|\blpn\b/i },
+  { label: "Public Health", title: /public health|epidemiolog|health policy/i },
+  { label: "Biology", title: /biolog|genomic|life science/i },
+  { label: "Chemistry", title: /chemist/i },
+  { label: "Physics", title: /physic(s|ist)/i },
+  { label: "Psychology", title: /psycholog|behavior|mental health/i },
+  { label: "Political Science", title: /\bpolicy\b|government affairs|legislative|political/i },
+  { label: "Pre-Law", title: /legal|paralegal|attorney|law clerk/i },
+  { label: "Education", fields: ["Education"] },
+  { label: "Human Resources", title: /recruit|talent acquisition|human resources|\bhr\b/i },
+];
+
+const MAJOR_RULES = new Map(MAJORS.map((major) => [major.label, major]));
+
+// what the Planner's links ask for
+const OLD_FIELD_LINKS: Record<string, string[]> = {
+  Software: ["Computer Science"], "AI & Data": ["Data Science"], Hardware: ["Electrical Engineering"], Quant: ["Mathematics"], Design: ["Design"], "Business & Finance": ["Business"],
 };
 
-export const LEVEL_NAMES: Record<Level, string> = { internship: "Internship", entry: "Entry level", mid: "Mid level", senior: "Senior level" };
+export function fitsMajor(item: Internship, major: string): boolean {
+  const rule = MAJOR_RULES.get(major);
+  return Boolean(rule && (rule.fields?.includes(item.field) || rule.title?.test(item.title)));
+}
 
-export const kindOf = (item: Internship): Kind => ((item.type ?? "internship") === "internship" ? "internship" : "job");
+export const LEVEL_NAMES: Record<Level, string> = { internship: "Internship", entry: "Entry Level", mid: "Mid Level", senior: "Senior Level" };
+
 
 /** Levels kept in their own files, loaded only when someone asks for them. */
-export function extraLevels(kind: Kind, levels: LevelChoice[]): ("mid" | "senior")[] {
-  if (kind !== "job") return [];
+export function extraLevels(levels: Level[]): ("mid" | "senior")[] {
   return (["mid", "senior"] as const).filter((level) => levels.length === 0 || levels.includes(level));
 }
 
-/** Whether a listing is the kind and level asked for. */
-export function inLevel(item: Internship, kind: Kind, levels: LevelChoice[]): boolean {
-  if (kindOf(item) !== kind) return false;
-  if (levels.length === 0) return true;
-  return levels.some((level) => (level === "undergrad" ? !item.gradOnly : level === "grad" ? item.gradOnly : item.type === level));
+/** Whether a listing is one of the levels asked for. */
+export function inLevel(item: Internship, levels: Level[]): boolean {
+  return levels.length === 0 || levels.includes(item.type ?? "internship");
 }
 
 // the hiring systems employers post their own openings on
@@ -124,7 +164,7 @@ export function fitsGraduation(item: Internship, grad: string): boolean {
   const [year, month] = grad.split("-").map(Number);
   const named = graduationYears(item.title);
   if (named.length) return named.includes(year);
-  if (kindOf(item) !== "internship") return true;
+  if ((item.type ?? "internship") !== "internship") return true;
   const starts = item.terms.map((term) => term.split(" ")).filter(([season, y]) => TERM_STARTS[season] !== undefined && /^\d{4}$/.test(y ?? ""));
   return starts.length === 0 || starts.some(([season, y]) => Number(y) * 12 + TERM_STARTS[season] < year * 12 + month);
 }
@@ -209,7 +249,7 @@ export function inPlace(location: string, query: string): boolean {
 export const isNew = (item: Internship, since: number | null) => since !== null && (item.added ?? 0) > since;
 
 /** anyLevel is for Saved and Applied, which list everything marked, whatever its kind. */
-export function matches(item: Internship, f: Filters, since: number | null = null, anyLevel = false, within?: (place: string) => boolean): boolean {
+export function matches(item: Internship, f: Filters, since: number | null = null, anyLevel = false, within?: (place: string) => boolean, now = Date.now() / 1000): boolean {
   if (f.fresh && !isNew(item, since)) return false;
   const text = `${item.company} ${item.title}`;
   if (!f.query.trim().split(/\s+/).every((word) => has(text, word))) return false;
@@ -218,36 +258,42 @@ export function matches(item: Internship, f: Filters, since: number | null = nul
     const nearby = f.location.trim() !== "" && item.locations.some((l) => inPlace(l, f.location) || within?.(l));
     if (!nearby && !(f.remote && item.locations.some((l) => has(l, "remote")))) return false;
   }
-  if (!anyLevel && !inLevel(item, f.kind, f.level)) return false;
+  if (!anyLevel && !inLevel(item, f.level)) return false;
   if (f.size.length && !f.size.some((size) => inSize(item, Number(size)))) return false;
   if (f.verified && !isVerified(item)) return false;
+  if (f.posted && (!item.posted || item.posted < now - Number(f.posted) * 86400)) return false;
+  // with both on, undergrad and graduate listings are both wanted
+  if (f.undergrad && !f.forGrads && item.gradOnly) return false;
+  if (f.forGrads && !f.undergrad && !item.gradOnly) return false;
   if (f.grad && !fitsGraduation(item, f.grad)) return false;
-  if (f.field.length && !f.field.includes(item.field)) return false;
+  if (f.major.length && !f.major.some((major) => fitsMajor(item, major))) return false;
   if (f.term.length && !f.term.some((term) => item.terms.includes(term))) return false;
   if (f.sponsorship && item.sponsorship && item.sponsorship !== "offers") return false;
   if (f.permanent && item.sponsorship === "citizens") return false;
   return true;
 }
 
-/** The kind and level a link asks for: ?kind=jobs, ?level=mid. Links from before the two lists say level=all or internship. */
+/** The levels a link asks for: ?level=mid, ?kind=jobs, ?level=all. */
 function kindAndLevel(kind: string | null, level: string | null): Partial<Filters> {
-  for (const k of ["internship", "job"] as const) {
-    const found = LEVELS[k].find((l) => l.id === level);
-    if (found) return { kind: k, level: [found.id] };
-  }
-  if (kind === "jobs" || kind === "job" || level === "all") return { kind: "job" };
+  const found = LEVELS.find((l) => l.id === level);
+  if (found) return { level: [found.id] };
+  if (level === "all") return { level: [] };
+  if (kind === "jobs" || kind === "job") return { level: ["entry", "mid", "senior"] };
   return {};
 }
 
-/** A search passed in the address, as links from the Planner do: ?q=security&field=Software&location=LA */
-export function filtersFromUrl(search: string, items: Internship[]): Partial<Filters> {
+/** A search passed in the address, as links do: ?q=security&major=EECS&location=LA. The Planner still sends field=Software. */
+export function filtersFromUrl(search: string): Partial<Filters> {
   const params = new URLSearchParams(search);
-  const field = params.getAll("field").filter((name) => items.some((item) => item.field === name));
+  const major = [...new Set([
+    ...params.getAll("major").filter((name) => MAJOR_RULES.has(name)),
+    ...params.getAll("field").flatMap((name) => OLD_FIELD_LINKS[name] ?? []),
+  ])];
   return {
     ...kindAndLevel(params.get("kind"), params.get("level")),
     ...(params.get("q") && { query: params.get("q")! }),
     ...(params.get("location") && { location: params.get("location")! }),
-    ...(field.length > 0 && { field }),
+    ...(major.length > 0 && { major }),
   };
 }
 
@@ -276,31 +322,31 @@ export function readTracked(saved: unknown, items: Internship[]): Tracked {
  * opens themselves.
  */
 export function searchElsewhere(f: Filters): { name: string; url: string }[] {
-  // these sites take one search, so several fields can't be asked for at once
-  const keywords = f.query.trim() || (f.field.length === 1 ? f.field[0] : "");
-  const all = f.kind === "internship" ? { word: "internship", linkedin: "1" } : { word: "", linkedin: "2,3,4,5" };
+  // these sites take one search, so several majors can't be asked for at once
+  const keywords = f.query.trim() || (f.major.length === 1 ? f.major[0] : "");
   // LinkedIn's experience levels: 1 internship, 2 entry level, 3 associate, 4 mid-senior, 5 director
-  const sites: Record<LevelChoice, { word: string; linkedin: string }> = {
-    undergrad: { word: "undergraduate internship", linkedin: "1" },
-    grad: { word: "graduate internship", linkedin: "1" },
+  const sites: Record<Level, { word: string; linkedin: string }> = {
+    internship: { word: "internship", linkedin: "1" },
     entry: { word: "entry level", linkedin: "2" },
     mid: { word: "", linkedin: "3,4" },
     senior: { word: "senior", linkedin: "4,5" },
   };
   const picks = f.level.map((level) => sites[level]);
-  const word = picks.length === 1 ? picks[0].word : all.word;
-  const levels = picks.length ? [...new Set(picks.flatMap((p) => p.linkedin.split(",")))].sort().join(",") : all.linkedin;
+  const word = picks.length === 1 ? picks[0].word : "";
+  const levels = [...new Set(picks.flatMap((p) => p.linkedin.split(",")))].sort().join(",");
   const miles = f.location.trim() ? Math.min(Number(f.miles) || 0, 100) : 0;  // neither site looks further than 100
   const words = `${keywords} ${word}`.trim();
   const place = f.location.trim() || "United States";
   const linkedin = new URLSearchParams({ keywords: words || "jobs", location: place });
-  linkedin.set("f_E", levels);
+  if (levels) linkedin.set("f_E", levels);
   if (miles) linkedin.set("distance", String(miles));
+  const days = Number(f.posted) || 0;
+  if (days) linkedin.set("f_TPR", `r${days * 86400}`);
   if (f.remote) linkedin.set("f_WT", "2");  // f_WT=2: remote
   return [
     { name: "Handshake", url: `https://app.joinhandshake.com/stu/postings?${new URLSearchParams({ query: words })}` },
     { name: "LinkedIn", url: `https://www.linkedin.com/jobs/search/?${linkedin}` },
-    { name: "Indeed", url: `https://www.indeed.com/jobs?${new URLSearchParams({ q: words, l: f.remote && !f.location.trim() ? "Remote" : place, ...(miles && { radius: String(miles) }) })}` },
+    { name: "Indeed", url: `https://www.indeed.com/jobs?${new URLSearchParams({ q: words, l: f.remote && !f.location.trim() ? "Remote" : place, ...(miles && { radius: String(miles) }), ...(days && { fromage: String(Math.min(days, 14)) }) })}` },
     { name: "Simplify", url: `https://simplify.jobs/jobs?${new URLSearchParams({ q: words })}` },
   ];
 }

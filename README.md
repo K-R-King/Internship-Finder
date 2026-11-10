@@ -5,7 +5,7 @@ U.S. internships and jobs for university students, gathered from company job boa
 ## Features
 
 - **One list from many sources**, with the same posting from different sources merged, and ended terms and long-abandoned listings left out.
-- **Search and filters:** separate Internships and Jobs tabs, each with its own levels (internships: open to undergrads or graduate students only; jobs: entry, mid or senior), plus company or role, location and distance (25 to 200 miles), fields, terms, graduation date, company size, verified companies, remote, permanent residents, and visa sponsorship. Results update as you change them, or press Search.
+- **Search and filters:** internships and job levels (entry, mid, senior), degree (undergrad or graduate students), plus company or role, location and distance (25 to 200 miles), majors, terms, date posted, graduation date, company size, verified companies, remote, permanent residents, and visa sponsorship. Results update as you change them, or press Search.
 - **U.S. only:** a listing keeps only its U.S. places, and is left out if it has none.
 - **Company size:** an exact count from Wikidata when there is one, otherwise a band from [BigPicture's free company dataset](https://huggingface.co/datasets/bigpictureio/companies-2023-q4-sm) (ODC-BY, late 2023). That dataset is matched by company name: of the companies sharing a name, the largest U.S. one is taken, and a band too small for a company's number of openings is dropped. Checked against Wikidata, about 7 in 10 land in the right band, so sizes are approximate.
 - **Saved and Applied tracking**, stored in your browser. Tracked listings stay after they close, marked "No longer listed".
@@ -33,7 +33,7 @@ npm run dev
 
 Open `http://localhost:3005`.
 
-`npm run sync` skips a source that fails, and keeps the old files if the result shrinks by more than half. It writes `public/internships.json` (internships and entry level, loaded first), `public/jobs-mid.json` and `public/jobs-senior.json` (loaded when someone opens Jobs), which the page reads locally.
+`npm run sync` skips a source that fails, and keeps the old files if the result shrinks by more than half. It writes `public/internships.json` (internships and entry level, loaded first), `public/jobs-mid.json` and `public/jobs-senior.json` (loaded when someone picks those levels), which the page reads locally.
 
 `.github/workflows/refresh.yml` runs it every day (about an hour) and publishes the files to the `data` branch, which the live site reads from GitHub directly. That branch is replaced each time rather than added to, so the repo doesn't grow and no deploy is needed. It opens an issue if anything goes wrong.
 
