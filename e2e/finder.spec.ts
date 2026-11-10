@@ -233,13 +233,11 @@ test("one menu picks internships and job levels, shown on each listing", async (
   await expect(page.getByRole("button", { name: `${LEVELS}: 2 selected` })).toBeVisible();
 });
 
-test("no major is offered as a shortcut, and quick buttons set remote or this week's listings", async ({ page }) => {
+test("there are no shortcut buttons that look like filters", async ({ page }) => {
   await open(page);
-  await expect(page.getByRole("button", { name: "Computer Science", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "EECS", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Work from anywhere" }).click();
-  await expect(rows(page)).toHaveCount(1);
-  await expect(page.getByLabel("Remote", { exact: true })).toBeChecked();
+  for (const name of ["Computer Science", "EECS", "Data Science", "Business", "Work from anywhere", "Fresh this week"]) {
+    await expect(page.getByRole("button", { name })).toHaveCount(0);
+  }
 });
 
 test("the term menu is called Applying for term", async ({ page }) => {

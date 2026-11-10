@@ -636,15 +636,6 @@ export default function Finder() {
           </div>
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none]">
-          <button type="button" aria-pressed={filters.remote} onClick={() => change({ remote: !filters.remote })} className={`${pill} ${filters.remote ? pillOn : pillOff} hover:-translate-y-px`}>
-            <span aria-hidden="true">🏠</span>Work from anywhere
-          </button>
-          <button type="button" aria-pressed={filters.posted === "7"} onClick={() => change({ posted: filters.posted === "7" ? "" : "7" })} className={`${pill} ${filters.posted === "7" ? pillOn : pillOff} hover:-translate-y-px`}>
-            <span aria-hidden="true">🔥</span>Fresh this week
-          </button>
-        </div>
-
         <div id="more-filters" className={`${moreOpen ? "flex" : "hidden"} relative flex-wrap items-center gap-2 sm:flex`}>
           {browsing && (
             <Menu caption="Internships and Job Levels" options={LEVELS.map((l) => ({ value: l.id, label: l.label }))} picked={filters.level} onChange={(level) => pickLevels(level as Level[])} />
