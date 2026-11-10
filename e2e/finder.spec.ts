@@ -32,8 +32,14 @@ async function open(page: Page) {
 
 const rows = (page: Page) => page.locator("[data-listing]");
 
+const LEVELS = "Internships and Job Levels";
+
 async function openJobs(page: Page) {
-  await page.getByRole("button", { name: "Jobs", exact: true }).click();
+  await menu(page, LEVELS).click();
+  const list = page.getByRole("group", { name: LEVELS, exact: true });
+  for (const name of ["Entry Level Jobs", "Mid Level Jobs", "Senior Level Jobs"]) await list.getByRole("checkbox", { name, exact: true }).check();
+  await list.getByRole("checkbox", { name: "Internships", exact: true }).uncheck();
+  await page.keyboard.press("Escape");
   await expect(page.getByText("3 jobs, newest first")).toBeVisible();
 }
 
@@ -50,7 +56,7 @@ async function pickOne(page: Page, caption: string, name: string) {
   await page.getByRole("group", { name: caption, exact: true }).getByRole("radio", { name, exact: true }).click();
 }
 
-const pickField = (page: Page, name: string) => pick(page, "Field", name);
+const pickMajor = (page: Page, name: string) => pick(page, "Major", name);
 
 test("shows listings a page at a time", async ({ page }) => {
   await open(page);
@@ -65,7 +71,7 @@ test("search and filters narrow the list", async ({ page }) => {
   await expect(page.getByText("1 internship, newest first")).toBeVisible();
   await page.getByLabel("Search by company or role").fill("");
 
-  await pickField(page, "Hardware");
+  await pickMajor(page, "Electrical Engineering");
   await expect(rows(page)).toHaveCount(1);
   await page.getByLabel("May sponsor visas").check();
   await expect(page.getByText("Nothing matches those filters")).toBeVisible();
@@ -81,7 +87,7 @@ test("search and filters narrow the list", async ({ page }) => {
   await expect(rows(page)).toHaveCount(1);
   await page.getByLabel("Remote", { exact: true }).uncheck();
 
-  await pick(page, "Experience level", "Open to undergrads");
+  await pick(page, "Degree", "Undergrad Students");
   await expect(page.getByText("63 internships, newest first")).toBeVisible();
 });
 
@@ -115,7 +121,7 @@ test("an empty Saved list says so", async ({ page }) => {
   await open(page);
   await page.getByRole("button", { name: "Saved (0)" }).click();
   await expect(page.getByText("Nothing saved yet")).toBeVisible();
-  await page.getByRole("button", { name: "See all internships" }).click();
+  await page.getByRole("button", { name: "See all listings" }).click();
   await expect(page.getByText("64 internships, newest first")).toBeVisible();
 });
 
@@ -129,9 +135,9 @@ test("damaged saved data doesn't break the page", async ({ page }) => {
 test("each filter in use can be removed on its own", async ({ page }) => {
   await open(page);
   await page.getByLabel("Remote", { exact: true }).check();
-  await pickField(page, "Hardware");
+  await pickMajor(page, "Electrical Engineering");
   await expect(page.getByText("Nothing matches those filters")).toBeVisible();
-  await page.getByRole("button", { name: "Remove Hardware" }).click();
+  await page.getByRole("button", { name: "Remove Electrical Engineering" }).click();
   await expect(rows(page)).toHaveCount(1);
   await expect(rows(page)).toContainText("Globex");
   await page.getByRole("button", { name: "Clear all" }).click();
@@ -141,9 +147,9 @@ test("each filter in use can be removed on its own", async ({ page }) => {
 test("on a phone, the extra filters fold away until asked for", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 800 });
   await open(page);
-  await expect(menu(page, "Field")).toBeHidden();
+  await expect(menu(page, "Major")).toBeHidden();
   await page.getByRole("button", { name: "Filters", exact: true }).click();
-  await pickField(page, "Hardware");
+  await pickMajor(page, "Electrical Engineering");
   await expect(rows(page)).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Filters (1)" })).toBeVisible();
 });
@@ -183,7 +189,7 @@ test("a search in the address opens that search", async ({ page }) => {
   await page.goto("/?q=accounting&field=Business%20%26%20Finance");
   await expect(page.getByText("1 internship, newest first")).toBeVisible();
   await expect(page.getByLabel("Search by company or role")).toHaveValue("accounting");
-  await expect(menu(page, "Field")).toContainText("Business & Finance");
+  await expect(menu(page, "Major")).toContainText("Business");
 });
 
 test("changing a filter says results are updating, and Search runs it right away", async ({ page }) => {
@@ -202,29 +208,40 @@ test("changing a filter says results are updating, and Search runs it right away
   await expect(rows(page)).toContainText("Initech");
 });
 
-test("internships and jobs each have their own levels, shown on each listing", async ({ page }) => {
+test("one menu picks internships and job levels, shown on each listing", async ({ page }) => {
   await open(page);
-  const levels = page.getByRole("group", { name: "Experience level", exact: true }).locator("label");
-  await menu(page, "Experience level").click();
-  await expect(levels).toHaveText(["Open to undergrads", "Graduate students only"]);
+  const levels = page.getByRole("group", { name: LEVELS, exact: true }).locator("label");
+  await menu(page, LEVELS).click();
+  await expect(levels).toHaveText(["Internships", "Entry Level Jobs", "Mid Level Jobs", "Senior Level Jobs"]);
   await page.keyboard.press("Escape");
+  await expect(menu(page, LEVELS)).toContainText("Internships");
   await expect(rows(page).first()).toContainText("Internship");
-  await pick(page, "Experience level", "Graduate students only");
+
+  await pick(page, "Degree", "Graduate Students");
   await expect(rows(page)).toHaveCount(1);
   await expect(rows(page)).toContainText("Initech");
+  await page.getByRole("button", { name: "Remove Graduate Students" }).click();
 
-  await page.getByRole("button", { name: "Jobs", exact: true }).click();
-  await expect(page.getByText("3 jobs, newest first")).toBeVisible();
-  await menu(page, "Experience level").click();
-  await expect(levels).toHaveText(["Entry level", "Mid level", "Senior level"]);
-  await page.keyboard.press("Escape");
+  await openJobs(page);
   await expect(menu(page, "Term")).toHaveCount(0);
-  await pick(page, "Experience level", "Entry level");
+  await page.getByRole("button", { name: "Remove Mid Level Jobs" }).click();
+  await page.getByRole("button", { name: "Remove Senior Level Jobs" }).click();
   await expect(rows(page)).toHaveCount(1);
-  await expect(rows(page)).toContainText("Entry level");
-  await pick(page, "Experience level", "Senior level");
+  await expect(rows(page)).toContainText("Entry Level");
+  await pick(page, LEVELS, "Senior Level Jobs");
   await expect(rows(page)).toHaveCount(2);
-  await expect(page.getByRole("button", { name: "Experience level: 2 selected" })).toBeVisible();
+  await expect(page.getByRole("button", { name: `${LEVELS}: 2 selected` })).toBeVisible();
+});
+
+test("quick buttons set a major, remote or this week's listings", async ({ page }) => {
+  await open(page);
+  await page.getByRole("button", { name: "Computer Science", exact: true }).click();
+  await expect(rows(page)).toHaveCount(50);
+  await expect(menu(page, "Major")).toContainText("Computer Science");
+  await page.getByRole("button", { name: "Computer Science", exact: true }).click();
+  await page.getByRole("button", { name: "Work from anywhere" }).click();
+  await expect(rows(page)).toHaveCount(1);
+  await expect(page.getByLabel("Remote", { exact: true })).toBeChecked();
 });
 
 test("a distance reaches nearby cities, and says so when it can't place the search", async ({ page }) => {
@@ -247,6 +264,19 @@ test("a distance reaches nearby cities, and says so when it can't place the sear
   await page.getByLabel("Location", { exact: true }).fill("");
   await expect(menu(page, "Distance")).toBeDisabled();
   await expect(page.getByRole("button", { name: /Within 50 miles/ })).toHaveCount(0);
+});
+
+test("date posted narrows to recent listings", async ({ page }) => {
+  await open(page);  // the sample listings were posted just over a day before the refresh
+  await menu(page, "Date posted").click();
+  await expect(page.getByRole("group", { name: "Date posted", exact: true }).locator("label")).toHaveText(["Any time", "1 day", "1 Week", "1 Month"]);
+  await page.getByRole("radio", { name: "1 day", exact: true }).click();
+  await expect(page.getByText("Nothing matches those filters")).toBeVisible();
+  await pickOne(page, "Date posted", "1 Week");
+  await expect(page.getByText("64 internships, newest first")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remove Posted within 1 Week" })).toBeVisible();
+  await pickOne(page, "Date posted", "Any time");
+  await expect(menu(page, "Date posted")).toHaveAccessibleName("Date posted: any");
 });
 
 test("a graduation date removes internships that start after it", async ({ page }) => {
@@ -274,13 +304,13 @@ test("verified companies are marked, and can be the only ones shown", async ({ p
 
 test("a menu closes when you click away, and picks stay when it reopens", async ({ page }) => {
   await open(page);
-  await menu(page, "Field").click();
-  await page.getByRole("checkbox", { name: "Hardware", exact: true }).check();
-  await expect(page.getByRole("group", { name: "Field", exact: true })).toBeVisible();
+  await menu(page, "Major").click();
+  await page.getByRole("checkbox", { name: "Electrical Engineering", exact: true }).check();
+  await expect(page.getByRole("group", { name: "Major", exact: true })).toBeVisible();
   await page.getByRole("heading", { name: /Internship/ }).first().click();
-  await expect(page.getByRole("group", { name: "Field", exact: true })).toHaveCount(0);
-  await menu(page, "Field").click();
-  await expect(page.getByRole("checkbox", { name: "Hardware", exact: true })).toBeChecked();
+  await expect(page.getByRole("group", { name: "Major", exact: true })).toHaveCount(0);
+  await menu(page, "Major").click();
+  await expect(page.getByRole("checkbox", { name: "Electrical Engineering", exact: true })).toBeChecked();
 });
 
 test("clearing filters on Saved stays on Saved", async ({ page }) => {
@@ -295,15 +325,38 @@ test("clearing filters on Saved stays on Saved", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Saved (1)" })).toHaveAttribute("aria-pressed", "true");
 });
 
-test("a term picked for internships doesn't quietly filter the Jobs tab", async ({ page }) => {
+test("a term picked on Saved doesn't quietly filter a list of only jobs", async ({ page }) => {
+  await open(page);
+  await openJobs(page);
+  await page.getByRole("button", { name: "Saved (0)" }).click();
+  await pick(page, "Term", "Fall 2027");
+  await page.getByRole("button", { name: "All listings" }).click();
+  await expect(page.getByText("3 jobs, newest first")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remove Fall 2027" })).toHaveCount(0);
+});
+
+test("company size shows no counts, and Degree offers both groups", async ({ page }) => {
+  await open(page);
+  await menu(page, "Company size").click();
+  await expect(page.getByRole("group", { name: "Company size", exact: true })).not.toContainText("(");
+  await page.keyboard.press("Escape");
+  await menu(page, "Degree").click();
+  await expect(page.getByRole("group", { name: "Degree", exact: true }).locator("label")).toHaveText(["Undergrad Students", "Graduate Students"]);
+  await page.getByRole("checkbox", { name: "Undergrad Students" }).check();
+  await page.getByRole("checkbox", { name: "Graduate Students" }).check();
+  await page.keyboard.press("Escape");
+  await expect(page.getByText("64 internships, newest first")).toBeVisible();
+});
+
+test("a term picked for internships doesn't quietly filter jobs", async ({ page }) => {
   await open(page);
   await pick(page, "Term", "Fall 2027");
-  await page.getByRole("button", { name: "Saved (0)" }).click();
+  await expect(rows(page)).toHaveCount(1);
   await openJobs(page);
   await expect(page.getByRole("button", { name: "Remove Fall 2027" })).toHaveCount(0);
 });
 
-test("searching while Jobs load doesn't download them again", async ({ page }) => {
+test("searching while jobs load doesn't download them again", async ({ page }) => {
   const asked: string[] = [];
   await open(page);
   await page.unroute("**/jobs-mid.json");
@@ -312,34 +365,33 @@ test("searching while Jobs load doesn't download them again", async ({ page }) =
     await new Promise((done) => setTimeout(done, 1500));
     await route.fulfill({ json: MID });
   });
-  await page.getByRole("button", { name: "Jobs", exact: true }).click();
+  await pick(page, LEVELS, "Mid Level Jobs");
   await page.waitForTimeout(500);
   await page.getByLabel("Search by company or role").fill("engineer");
-  await expect(page.getByText(/\d+ jobs?, newest first/)).toBeVisible({ timeout: 8000 });
+  await expect(page.getByText(/\d+ listings?, newest first/)).toBeVisible({ timeout: 8000 });
   expect(asked).toHaveLength(1);
 });
 
 test("several fields can be picked at once", async ({ page }) => {
   await open(page);
-  await pickField(page, "Hardware");
-  await pickField(page, "Business & Finance");
-  await expect(page.getByRole("button", { name: "Field: 2 selected" })).toBeVisible();
+  await pickMajor(page, "Electrical Engineering");
+  await pickMajor(page, "Business");
+  await expect(page.getByRole("button", { name: "Major: 2 selected" })).toBeVisible();
   await expect(rows(page)).toHaveCount(2);
-  await page.getByRole("button", { name: "Remove Hardware" }).click();
+  await page.getByRole("button", { name: "Remove Electrical Engineering" }).click();
   await expect(rows(page)).toHaveCount(1);
   await expect(rows(page)).toContainText("Globex");
 });
 
 test("LA with Remote finds jobs in LA and remote ones", async ({ page }) => {
   await open(page);
-  await openJobs(page);
   await page.getByLabel("Location", { exact: true }).fill("LA");
+  await expect(page.getByText("Nothing matches those filters")).toBeVisible();
+  await pick(page, LEVELS, "Entry Level Jobs");
   await expect(rows(page)).toHaveCount(1);
   await expect(rows(page)).toContainText("Hooli");
-  await page.getByRole("button", { name: "Internships", exact: true }).click();
   await page.getByLabel("Remote", { exact: true }).check();
-  await expect(rows(page)).toHaveCount(1);
-  await expect(rows(page)).toContainText("Globex");
+  await expect(rows(page)).toHaveCount(2);
 });
 
 test("permanent residents can hide citizens-only jobs", async ({ page }) => {
@@ -356,10 +408,7 @@ test("mid and senior jobs load when asked for", async ({ page }) => {
   expect(asked).toEqual([]);  // not loaded until someone wants them
 
   await openJobs(page);
-  await pick(page, "Experience level", "Mid level");
-  await expect(rows(page)).toHaveCount(1);
-  await expect(rows(page)).toContainText("Initrode");
-  await expect(rows(page)).toContainText("Mid level");
+  await expect(rows(page).filter({ hasText: "Initrode" })).toContainText("Mid Level");
   expect(asked).toHaveLength(2);  // each file once
 });
 
@@ -369,13 +418,13 @@ test("a level in the address opens it", async ({ page }) => {
   await page.goto("/?level=senior");
   await expect(rows(page)).toHaveCount(1);
   await expect(rows(page)).toContainText("Vandelay");
-  await expect(menu(page, "Experience level")).toContainText("Senior level");
+  await expect(menu(page, LEVELS)).toContainText("Senior Level Jobs");
 });
 
 test("filters by company size, and shows the size", async ({ page }) => {
   await open(page);
   await openJobs(page);
-  await pick(page, "Company size", /^1,001\u20135,000 employees\s*\(1\)$/);
+  await pick(page, "Company size", /^1,001\u20135,000 employees$/);
   await expect(rows(page)).toHaveCount(1);
   await expect(rows(page)).toContainText("Hooli \u00b7 1,500 employees");
   await pick(page, "Company size", /^1\u201310 employees/);
@@ -387,7 +436,11 @@ test("filters by company size, and shows the size", async ({ page }) => {
 test("saved senior jobs stay listed, and aren't called closed", async ({ page }) => {
   await open(page);
   await openJobs(page);
-  await pick(page, "Experience level", "Senior level");
+  await menu(page, LEVELS).click();
+  await page.getByRole("checkbox", { name: "Entry Level Jobs", exact: true }).uncheck();
+  await page.getByRole("checkbox", { name: "Mid Level Jobs", exact: true }).uncheck();
+  await page.keyboard.press("Escape");
+  await expect(rows(page)).toHaveCount(1);
   await page.getByRole("button", { name: "Save Staff Engineer at Vandelay" }).click();
   await page.reload();
   await page.getByRole("button", { name: "Saved (1)" }).click();
@@ -429,7 +482,7 @@ for (const colorScheme of ["light", "dark"] as const) {
     await open(page);
     await page.getByLabel("Remote", { exact: true }).check();  // a pill that's on, and a menu that's open, get checked too
     await expect(rows(page)).toHaveCount(1);
-    await menu(page, "Field").click();
+    await menu(page, "Major").click();
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id)).toEqual([]);
   });

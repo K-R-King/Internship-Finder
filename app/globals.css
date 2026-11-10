@@ -40,3 +40,77 @@ body {
   background-size: 44px 44px;
   mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
 }
+
+/* the glowing shapes behind the header */
+.blob {
+  border-radius: 9999px;
+  filter: blur(70px);
+  animation: drift 14s ease-in-out infinite alternate;
+}
+.blob-gold {
+  top: -6rem;
+  right: 8%;
+  width: 22rem;
+  height: 22rem;
+  background: rgb(253 181 21 / 0.28);
+}
+.blob-sky {
+  bottom: -9rem;
+  left: 4%;
+  width: 26rem;
+  height: 26rem;
+  background: rgb(56 189 248 / 0.25);
+  animation-delay: -6s;
+}
+@keyframes drift {
+  to {
+    transform: translate(3rem, 2rem) scale(1.15);
+  }
+}
+
+/* "Finder", with a slow gleam across it */
+.gold-shine {
+  background: linear-gradient(100deg, #fdb515 30%, #fff1c2 50%, #fdb515 70%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shine 5s linear infinite;
+}
+@keyframes shine {
+  from {
+    background-position: 125% 0;
+  }
+  to {
+    background-position: -125% 0;
+  }
+}
+
+.pulse-dot {
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.75);
+  }
+}
+
+/* job cards slide up into place */
+.rise {
+  animation: rise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@keyframes rise {
+  from {
+    transform: translateY(14px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blob,
+  .gold-shine,
+  .pulse-dot,
+  .rise {
+    animation: none;
+  }
+}
