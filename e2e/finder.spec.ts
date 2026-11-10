@@ -77,7 +77,7 @@ test("search and filters narrow the list", async ({ page }) => {
   await expect(page.getByText("Nothing matches those filters")).toBeVisible();
   await page.getByRole("button", { name: "Clear filters" }).click();
 
-  await pick(page, "Term", "Fall 2027");
+  await pick(page, "Applying for term", "Fall 2027");
   await expect(rows(page)).toHaveCount(1);
   await page.getByRole("button", { name: "Remove Fall 2027" }).click();
   await page.getByLabel("Location", { exact: true }).fill("boston");
@@ -223,7 +223,7 @@ test("one menu picks internships and job levels, shown on each listing", async (
   await page.getByRole("button", { name: "Remove Graduate Students" }).click();
 
   await openJobs(page);
-  await expect(menu(page, "Term")).toHaveCount(0);
+  await expect(menu(page, "Applying for term")).toHaveCount(0);
   await page.getByRole("button", { name: "Remove Mid Level Jobs" }).click();
   await page.getByRole("button", { name: "Remove Senior Level Jobs" }).click();
   await expect(rows(page)).toHaveCount(1);
@@ -233,15 +233,19 @@ test("one menu picks internships and job levels, shown on each listing", async (
   await expect(page.getByRole("button", { name: `${LEVELS}: 2 selected` })).toBeVisible();
 });
 
-test("quick buttons set a major, remote or this week's listings", async ({ page }) => {
+test("no major is offered as a shortcut, and quick buttons set remote or this week's listings", async ({ page }) => {
   await open(page);
-  await page.getByRole("button", { name: "Computer Science", exact: true }).click();
-  await expect(rows(page)).toHaveCount(50);
-  await expect(menu(page, "Major")).toContainText("Computer Science");
-  await page.getByRole("button", { name: "Computer Science", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Computer Science", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "EECS", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Work from anywhere" }).click();
   await expect(rows(page)).toHaveCount(1);
   await expect(page.getByLabel("Remote", { exact: true })).toBeChecked();
+});
+
+test("the term menu is called Applying for term", async ({ page }) => {
+  await open(page);
+  await expect(page.getByRole("button", { name: /^Term:/ })).toHaveCount(0);
+  await expect(menu(page, "Applying for term")).toContainText("Applying for term");
 });
 
 test("a distance reaches nearby cities, and says so when it can't place the search", async ({ page }) => {
@@ -329,7 +333,7 @@ test("a term picked on Saved doesn't quietly filter a list of only jobs", async 
   await open(page);
   await openJobs(page);
   await page.getByRole("button", { name: "Saved (0)" }).click();
-  await pick(page, "Term", "Fall 2027");
+  await pick(page, "Applying for term", "Fall 2027");
   await page.getByRole("button", { name: "All listings" }).click();
   await expect(page.getByText("3 jobs, newest first")).toBeVisible();
   await expect(page.getByRole("button", { name: "Remove Fall 2027" })).toHaveCount(0);
@@ -350,7 +354,7 @@ test("company size shows no counts, and Degree offers both groups", async ({ pag
 
 test("a term picked for internships doesn't quietly filter jobs", async ({ page }) => {
   await open(page);
-  await pick(page, "Term", "Fall 2027");
+  await pick(page, "Applying for term", "Fall 2027");
   await expect(rows(page)).toHaveCount(1);
   await openJobs(page);
   await expect(page.getByRole("button", { name: "Remove Fall 2027" })).toHaveCount(0);

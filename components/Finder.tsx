@@ -41,7 +41,6 @@ const POSTED = [
   { value: "30", label: "1 Month" },
 ];
 
-const QUICK_MAJORS: [emoji: string, major: string][] = [["💻", "Computer Science"], ["⚡", "EECS"], ["🤖", "Data Science"], ["📈", "Business"]];
 
 const VERIFIED_NOTE = "Posted on the employer's own hiring system, by a company found in public company records.";
 
@@ -526,10 +525,6 @@ export default function Finder() {
     change({ view: "all", ...(jobsOnly && { term: [] }) });
   }
 
-  function toggleMajor(major: string) {
-    change({ major: filters.major.includes(major) ? filters.major.filter((m) => m !== major) : [...filters.major, major] });
-  }
-
   function reset(view: Filters["view"]) {
     const cleared = { ...NO_FILTERS, view };
     setFilters(cleared);
@@ -642,11 +637,6 @@ export default function Finder() {
         </div>
 
         <div className="flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none]">
-          {QUICK_MAJORS.map(([emoji, major]) => (
-            <button key={major} type="button" aria-pressed={filters.major.includes(major)} onClick={() => toggleMajor(major)} className={`${pill} ${filters.major.includes(major) ? pillOn : pillOff} hover:-translate-y-px`}>
-              <span aria-hidden="true">{emoji}</span>{major}
-            </button>
-          ))}
           <button type="button" aria-pressed={filters.remote} onClick={() => change({ remote: !filters.remote })} className={`${pill} ${filters.remote ? pillOn : pillOff} hover:-translate-y-px`}>
             <span aria-hidden="true">🏠</span>Work from anywhere
           </button>
@@ -661,7 +651,7 @@ export default function Finder() {
           )}
           <Menu caption="Major" options={MAJORS.map((m) => ({ value: m.label, label: m.label }))} picked={filters.major} onChange={(major) => change({ major })} />
           {showTerm && (
-            <Menu caption="Term" options={[...new Set([...terms, ...filters.term])].map((t) => ({ value: t, label: t }))} picked={filters.term} onChange={(term) => change({ term })} />
+            <Menu caption="Applying for term" options={[...new Set([...terms, ...filters.term])].map((t) => ({ value: t, label: t }))} picked={filters.term} onChange={(term) => change({ term })} />
           )}
           <Menu
             caption="Degree"
