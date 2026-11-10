@@ -256,7 +256,7 @@ function Menu({ caption, all, options, picked, onChange, single = false, disable
   const button = useRef<HTMLButtonElement>(null);
   const id = useId();
   const nameOf = (value: string) => options.find((o) => o.value === value)?.label ?? value;
-  const summary = picked.length === 0 ? all : picked.length === 1 ? nameOf(picked[0]) : `${caption} (${picked.length})`;
+  const summary = picked.length === 0 ? all : picked.length === 1 ? `${caption}: ${nameOf(picked[0])}` : `${caption} (${picked.length})`;
 
   useEffect(() => {
     if (!open) return;
