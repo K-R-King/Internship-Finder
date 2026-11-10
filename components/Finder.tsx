@@ -240,8 +240,9 @@ function Row({ item, index, status, closed, fresh, updated, onTrack }: {
 }
 
 /** A pill that opens a list of choices: checkboxes for any number of them, or radio buttons with `single`. */
-function Menu({ caption, options, picked, onChange, single = false, disabled = false, hint }: {
+function Menu({ caption, all, options, picked, onChange, single = false, disabled = false, hint }: {
   caption: string;
+  all: string;  // the heading while nothing is picked
   options: { value: string; label: string }[];
   picked: string[];
   onChange: (next: string[]) => void;
@@ -255,7 +256,7 @@ function Menu({ caption, options, picked, onChange, single = false, disabled = f
   const button = useRef<HTMLButtonElement>(null);
   const id = useId();
   const nameOf = (value: string) => options.find((o) => o.value === value)?.label ?? value;
-  const summary = picked.length === 0 ? caption : picked.length === 1 ? `${caption}: ${nameOf(picked[0])}` : `${caption} (${picked.length})`;
+  const summary = picked.length === 0 ? all : picked.length === 1 ? `${caption}: ${nameOf(picked[0])}` : `${caption} (${picked.length})`;
 
   useEffect(() => {
     if (!open) return;
@@ -293,7 +294,7 @@ function Menu({ caption, options, picked, onChange, single = false, disabled = f
         title={disabled ? hint : undefined}
         aria-expanded={open}
         aria-controls={open ? id : undefined}
-        aria-label={`${caption}: ${picked.length === 0 ? "any" : picked.length === 1 ? nameOf(picked[0]) : `${picked.length} selected`}`}
+        aria-label={`${caption}: ${picked.length === 0 ? all : picked.length === 1 ? nameOf(picked[0]) : `${picked.length} selected`}`}
         onClick={toggle}
         className={`${pill} ${picked.length ? pillOn : pillOff} max-w-[calc(100vw-5.5rem)] disabled:cursor-not-allowed disabled:opacity-60`}
       >
@@ -638,22 +639,22 @@ export default function Finder() {
 
         <div id="more-filters" className={`${moreOpen ? "flex" : "hidden"} relative flex-wrap items-center gap-2 sm:flex`}>
           {browsing && (
-            <Menu caption="Internships and Job Levels" options={LEVELS.map((l) => ({ value: l.id, label: l.label }))} picked={filters.level} onChange={(level) => pickLevels(level as Level[])} />
+            <Menu caption="Internships and Job Levels" all="All Internships and Job Levels" options={LEVELS.map((l) => ({ value: l.id, label: l.label }))} picked={filters.level} onChange={(level) => pickLevels(level as Level[])} />
           )}
-          <Menu caption="Major" options={MAJORS.map((m) => ({ value: m.label, label: m.label }))} picked={filters.major} onChange={(major) => change({ major })} />
+          <Menu caption="Major" all="All Majors" options={MAJORS.map((m) => ({ value: m.label, label: m.label }))} picked={filters.major} onChange={(major) => change({ major })} />
           {showTerm && (
-            <Menu caption="Applying for term" options={[...new Set([...terms, ...filters.term])].map((t) => ({ value: t, label: t }))} picked={filters.term} onChange={(term) => change({ term })} />
+            <Menu caption="Applying for term" all="Applying for All Terms" options={[...new Set([...terms, ...filters.term])].map((t) => ({ value: t, label: t }))} picked={filters.term} onChange={(term) => change({ term })} />
           )}
           <Menu
-            caption="Degree"
+            caption="Degree" all="All Degrees"
             options={DEGREES}
             picked={[...(filters.undergrad ? ["undergrad"] : []), ...(filters.forGrads ? ["grad"] : [])]}
             onChange={(picked) => change({ undergrad: picked.includes("undergrad"), forGrads: picked.includes("grad") })}
           />
-          <Menu caption="Date posted" single options={POSTED} picked={filters.posted ? [filters.posted] : []} onChange={([posted = ""]) => change({ posted })} />
-          <Menu caption="Graduation date" single options={[{ value: "", label: "Any graduation date" }, ...grads]} picked={filters.grad ? [filters.grad] : []} onChange={([grad = ""]) => change({ grad })} />
-          <Menu caption="Company size" options={SIZES.map((s, i) => ({ value: String(i), label: s.label }))} picked={filters.size} onChange={(size) => change({ size })} />
-          <Menu caption="Distance" single disabled={!hasPlace} hint="Type a city first" options={DISTANCES} picked={hasPlace && filters.miles ? [filters.miles] : []} onChange={([miles = ""]) => change({ miles })} />
+          <Menu caption="Date posted" all="All Dates Posted" single options={POSTED} picked={filters.posted ? [filters.posted] : []} onChange={([posted = ""]) => change({ posted })} />
+          <Menu caption="Graduation date" all="All Graduation Dates" single options={[{ value: "", label: "Any graduation date" }, ...grads]} picked={filters.grad ? [filters.grad] : []} onChange={([grad = ""]) => change({ grad })} />
+          <Menu caption="Company size" all="All Company Sizes" options={SIZES.map((s, i) => ({ value: String(i), label: s.label }))} picked={filters.size} onChange={(size) => change({ size })} />
+          <Menu caption="Distance" all="All Distances" single disabled={!hasPlace} hint="Type a city first" options={DISTANCES} picked={hasPlace && filters.miles ? [filters.miles] : []} onChange={([miles = ""]) => change({ miles })} />
           {[...CHECKS, ...(newCount > 0 || filters.fresh ? [{ id: "fresh" as const, label: `New since last visit (${newCount.toLocaleString()})` }] : [])].map((c) => (
             <label key={c.id} className={`${pill} ${filters[c.id] ? pillOn : pillOff} cursor-pointer select-none`}>
               <input type="checkbox" checked={filters[c.id]} onChange={(e) => change({ [c.id]: e.target.checked })} className="h-4 w-4 accent-berkeley dark:accent-gold" />

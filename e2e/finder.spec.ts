@@ -240,29 +240,33 @@ test("there are no shortcut buttons that look like filters", async ({ page }) =>
   }
 });
 
-test("every menu keeps its name after something is picked", async ({ page }) => {
+test("dropdown headings say All until something is picked, then keep the title with the choice", async ({ page }) => {
   await open(page);
-  await expect(menu(page, LEVELS)).toContainText(`${LEVELS}: Internships`);
+  await expect(menu(page, LEVELS)).toHaveText(`${LEVELS}: Internships`);
+  for (const [caption, heading] of [
+    ["Major", "All Majors"], ["Applying for term", "Applying for All Terms"], ["Degree", "All Degrees"], ["Date posted", "All Dates Posted"],
+    ["Graduation date", "All Graduation Dates"], ["Company size", "All Company Sizes"], ["Distance", "All Distances"],
+  ]) await expect(menu(page, caption)).toHaveText(heading);
   await pick(page, "Major", "Artificial Intelligence (AI)");
-  await expect(menu(page, "Major")).toContainText("Major: Artificial Intelligence (AI)");
+  await expect(menu(page, "Major")).toHaveText("Major: Artificial Intelligence (AI)");
   await pick(page, "Degree", "Undergrad Students");
-  await expect(menu(page, "Degree")).toContainText("Degree: Undergrad Students");
-  await pick(page, "Company size", /^11/);
-  await expect(menu(page, "Company size")).toContainText("Company size: 11");
+  await expect(menu(page, "Degree")).toHaveText("Degree: Undergrad Students");
   await pickOne(page, "Date posted", "1 Week");
-  await expect(menu(page, "Date posted")).toContainText("Date posted: 1 Week");
+  await expect(menu(page, "Date posted")).toHaveText("Date posted: 1 Week");
+  await page.getByRole("button", { name: "Clear all" }).click();
+  await expect(menu(page, "Major")).toHaveText("All Majors");
 });
 
 test("the term menu is called Applying for term", async ({ page }) => {
   await open(page);
   await expect(page.getByRole("button", { name: /^Term:/ })).toHaveCount(0);
-  await expect(menu(page, "Applying for term")).toContainText("Applying for term");
+  await expect(menu(page, "Applying for term")).toHaveText("Applying for All Terms");
   await pick(page, "Applying for term", "Fall 2027");
-  await expect(menu(page, "Applying for term")).toContainText("Applying for term: Fall 2027");
+  await expect(menu(page, "Applying for term")).toHaveText("Applying for term: Fall 2027");
   const fits = await menu(page, "Applying for term").locator("span").first().evaluate((el) => el.scrollWidth <= el.clientWidth);
   expect(fits).toBe(true);  // not cut off
   await pick(page, "Applying for term", "Summer 2027");
-  await expect(menu(page, "Applying for term")).toContainText("Applying for term (2)");
+  await expect(menu(page, "Applying for term")).toHaveText("Applying for term (2)");
 });
 
 test("a distance reaches nearby cities, and says so when it can't place the search", async ({ page }) => {
@@ -297,7 +301,7 @@ test("date posted narrows to recent listings", async ({ page }) => {
   await expect(page.getByText("64 internships, newest first")).toBeVisible();
   await expect(page.getByRole("button", { name: "Remove Posted within 1 Week" })).toBeVisible();
   await pickOne(page, "Date posted", "Any time");
-  await expect(menu(page, "Date posted")).toHaveAccessibleName("Date posted: any");
+  await expect(menu(page, "Date posted")).toHaveAccessibleName("Date posted: All Dates Posted");
 });
 
 test("a graduation date removes internships that start after it", async ({ page }) => {
@@ -309,7 +313,7 @@ test("a graduation date removes internships that start after it", async ({ page 
   await pickOne(page, "Graduation date", "December 2027");
   await expect(page.getByText("64 internships, newest first")).toBeVisible();
   await pickOne(page, "Graduation date", "Any graduation date");
-  await expect(menu(page, "Graduation date")).toHaveAccessibleName("Graduation date: any");
+  await expect(menu(page, "Graduation date")).toHaveAccessibleName("Graduation date: All Graduation Dates");
 });
 
 test("verified companies are marked, and can be the only ones shown", async ({ page }) => {
