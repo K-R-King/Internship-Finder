@@ -318,7 +318,7 @@ export function readTracked(saved: unknown, items: Internship[]): Tracked {
 }
 
 /**
- * The student's current search on sites whose listings can't be gathered here. LinkedIn forbids automated
+ * The student's current search on sites whose listings can't be gathered here. LinkedIn and Built In forbid automated
  * access, Indeed's rules block it, and Handshake needs a student login, so these are plain links that the student
  * opens themselves.
  */
@@ -349,6 +349,7 @@ export function searchElsewhere(f: Filters): { name: string; url: string }[] {
     { name: "LinkedIn", url: `https://www.linkedin.com/jobs/search/?${linkedin}` },
     { name: "Indeed", url: `https://www.indeed.com/jobs?${new URLSearchParams({ q: words, l: f.remote && !f.location.trim() ? "Remote" : place, ...(miles && { radius: String(miles) }), ...(days && { fromage: String(Math.min(days, 14)) }) })}` },
     { name: "Simplify", url: `https://simplify.jobs/jobs?${new URLSearchParams({ q: words })}` },
+    { name: "Built In", url: words ? `https://builtin.com/jobs?${new URLSearchParams({ search: words })}` : "https://builtin.com/jobs" },
   ];
 }
 
