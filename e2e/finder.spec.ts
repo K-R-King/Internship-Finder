@@ -14,7 +14,7 @@ const DATA = {
     listing("b", "Globex", "Accounting Intern", { field: "Business & Finance", terms: ["Fall 2027"], locations: ["Remote"] }),
     listing("c", "Initech", "PhD Research Intern", { gradOnly: true, field: "AI & Data" }),
     listing("d", "Umbrella", "Hardware Intern", { sponsorship: "citizens", field: "Hardware", locations: ["Boston, MA"] }),
-    listing("e", "Hooli", "New Grad Engineer", { type: "entry", locations: ["Los Angeles, CA"], terms: [], employees: 1500, band: 5 }),
+    listing("e", "Hooli", "New Grad Engineer", { type: "entry", locations: ["Los Angeles, CA"], terms: [], employees: 1500, band: 5, url: "https://boards.greenhouse.io/hooli/jobs/1" }),
     ...Array.from({ length: 60 }, (_, i) => listing(`x${i}`, "Bulk Co", `Filler Intern ${i}`)),
   ],
 };
@@ -27,33 +27,53 @@ async function open(page: Page) {
   await page.route("**/jobs-mid.json", (route) => route.fulfill({ json: MID }));
   await page.route("**/jobs-senior.json", (route) => route.fulfill({ json: SENIOR }));
   await page.goto("/");
-  await expect(page.getByText("65 jobs, newest first")).toBeVisible();
+  await expect(page.getByText("64 internships, newest first")).toBeVisible();
 }
 
 const rows = (page: Page) => page.locator("[data-listing]");
+
+async function openJobs(page: Page) {
+  await page.getByRole("button", { name: "Jobs", exact: true }).click();
+  await expect(page.getByText("3 jobs, newest first")).toBeVisible();
+}
+
+const menu = (page: Page, caption: string) => page.getByRole("button", { name: new RegExp(`^${caption}:`) });
+
+async function pick(page: Page, caption: string, name: string | RegExp) {
+  await menu(page, caption).click();
+  await page.getByRole("group", { name: caption, exact: true }).getByRole("checkbox", { name, exact: typeof name === "string" }).check();
+  await page.keyboard.press("Escape");
+}
+
+async function pickOne(page: Page, caption: string, name: string) {
+  await menu(page, caption).click();
+  await page.getByRole("group", { name: caption, exact: true }).getByRole("radio", { name, exact: true }).click();
+}
+
+const pickField = (page: Page, name: string) => pick(page, "Field", name);
 
 test("shows listings a page at a time", async ({ page }) => {
   await open(page);
   await expect(rows(page)).toHaveCount(50);
   await page.getByRole("button", { name: /Show more/ }).click();
-  await expect(rows(page)).toHaveCount(65);
+  await expect(rows(page)).toHaveCount(64);
 });
 
 test("search and filters narrow the list", async ({ page }) => {
   await open(page);
   await page.getByLabel("Search by company or role").fill("globex");
-  await expect(page.getByText("1 job, newest first")).toBeVisible();
+  await expect(page.getByText("1 internship, newest first")).toBeVisible();
   await page.getByLabel("Search by company or role").fill("");
 
-  await page.getByLabel("Field", { exact: true }).selectOption("Hardware");
+  await pickField(page, "Hardware");
   await expect(rows(page)).toHaveCount(1);
   await page.getByLabel("May sponsor visas").check();
   await expect(page.getByText("Nothing matches those filters")).toBeVisible();
   await page.getByRole("button", { name: "Clear filters" }).click();
 
-  await page.getByLabel("Term", { exact: true }).selectOption("Fall 2027");
+  await pick(page, "Term", "Fall 2027");
   await expect(rows(page)).toHaveCount(1);
-  await page.getByLabel("Term", { exact: true }).selectOption("");
+  await page.getByRole("button", { name: "Remove Fall 2027" }).click();
   await page.getByLabel("Location", { exact: true }).fill("boston");
   await expect(rows(page)).toHaveCount(1);
   await page.getByLabel("Location", { exact: true }).fill("");
@@ -61,8 +81,8 @@ test("search and filters narrow the list", async ({ page }) => {
   await expect(rows(page)).toHaveCount(1);
   await page.getByLabel("Remote", { exact: true }).uncheck();
 
-  await page.getByLabel("Open to undergrads").check();
-  await expect(page.getByText("64 jobs, newest first")).toBeVisible();
+  await pick(page, "Experience level", "Open to undergrads");
+  await expect(page.getByText("63 internships, newest first")).toBeVisible();
 });
 
 test("saved and applied listings survive a refresh", async ({ page }) => {
@@ -70,7 +90,7 @@ test("saved and applied listings survive a refresh", async ({ page }) => {
   await page.getByRole("button", { name: "Save Software Intern at Acme" }).click();
   await page.getByRole("button", { name: "Applied Accounting Intern at Globex" }).click();
   await page.reload();
-  await expect(page.getByText("65 jobs, newest first")).toBeVisible();
+  await expect(page.getByText("64 internships, newest first")).toBeVisible();
 
   await page.getByRole("button", { name: "Saved (1)" }).click();
   await expect(rows(page)).toHaveCount(1);
@@ -95,35 +115,35 @@ test("an empty Saved list says so", async ({ page }) => {
   await open(page);
   await page.getByRole("button", { name: "Saved (0)" }).click();
   await expect(page.getByText("Nothing saved yet")).toBeVisible();
-  await page.getByRole("button", { name: "See all jobs" }).click();
-  await expect(page.getByText("65 jobs, newest first")).toBeVisible();
+  await page.getByRole("button", { name: "See all internships" }).click();
+  await expect(page.getByText("64 internships, newest first")).toBeVisible();
 });
 
 test("damaged saved data doesn't break the page", async ({ page }) => {
   await open(page);
   await page.evaluate(() => localStorage.setItem("internship-finder:tracked", "null"));
   await page.reload();
-  await expect(page.getByText("65 jobs, newest first")).toBeVisible();
+  await expect(page.getByText("64 internships, newest first")).toBeVisible();
 });
 
 test("each filter in use can be removed on its own", async ({ page }) => {
   await open(page);
   await page.getByLabel("Remote", { exact: true }).check();
-  await page.getByLabel("Field", { exact: true }).selectOption("Hardware");
+  await pickField(page, "Hardware");
   await expect(page.getByText("Nothing matches those filters")).toBeVisible();
   await page.getByRole("button", { name: "Remove Hardware" }).click();
   await expect(rows(page)).toHaveCount(1);
   await expect(rows(page)).toContainText("Globex");
   await page.getByRole("button", { name: "Clear all" }).click();
-  await expect(page.getByText("65 jobs, newest first")).toBeVisible();
+  await expect(page.getByText("64 internships, newest first")).toBeVisible();
 });
 
 test("on a phone, the extra filters fold away until asked for", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 800 });
   await open(page);
-  await expect(page.getByLabel("Field", { exact: true })).toBeHidden();
+  await expect(menu(page, "Field")).toBeHidden();
   await page.getByRole("button", { name: "Filters", exact: true }).click();
-  await page.getByLabel("Field", { exact: true }).selectOption("Hardware");
+  await pickField(page, "Hardware");
   await expect(rows(page)).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Filters (1)" })).toBeVisible();
 });
@@ -131,7 +151,7 @@ test("on a phone, the extra filters fold away until asked for", async ({ page })
 test("two letters search for a state", async ({ page }) => {
   await open(page);
   await page.getByLabel("Location", { exact: true }).fill("TX");
-  await expect(page.getByText("62 jobs, newest first")).toBeVisible();
+  await expect(page.getByText("62 internships, newest first")).toBeVisible();
   await page.getByLabel("Location", { exact: true }).fill("ON");
   await expect(page.getByText("Nothing matches those filters")).toBeVisible();
 });
@@ -141,7 +161,7 @@ test("marks listings added since the last visit, and a refresh keeps them marked
     json: { ...DATA, items: DATA.items.map((item) => ({ ...item, added: item.id === "a" ? 2000 : 100 })) },
   }));
   await page.goto("/");
-  await expect(page.getByText("65 jobs, newest first")).toBeVisible();
+  await expect(page.getByText("64 internships, newest first")).toBeVisible();
   await expect(page.getByText(/New since last visit/)).toHaveCount(0);  // a first visit marks nothing
 
   await page.evaluate(() => {
@@ -161,16 +181,16 @@ test("marks listings added since the last visit, and a refresh keeps them marked
 test("a search in the address opens that search", async ({ page }) => {
   await page.route("**/internships.json", (route) => route.fulfill({ json: DATA }));
   await page.goto("/?q=accounting&field=Business%20%26%20Finance");
-  await expect(page.getByText("1 job, newest first")).toBeVisible();
+  await expect(page.getByText("1 internship, newest first")).toBeVisible();
   await expect(page.getByLabel("Search by company or role")).toHaveValue("accounting");
-  await expect(page.getByLabel("Field", { exact: true })).toHaveValue("Business & Finance");
+  await expect(menu(page, "Field")).toContainText("Business & Finance");
 });
 
 test("changing a filter says results are updating, and Search runs it right away", async ({ page }) => {
   await open(page);
   await page.getByLabel("Search by company or role").fill("globex");
   await expect(page.getByText("Updating results\u2026")).toBeVisible();
-  await expect(page.getByText("1 job, newest first")).toBeVisible();
+  await expect(page.getByText("1 internship, newest first")).toBeVisible();
 
   await page.getByLabel("Search by company or role").fill("acme");
   await page.getByRole("button", { name: "Search", exact: true }).click();
@@ -182,27 +202,150 @@ test("changing a filter says results are updating, and Search runs it right away
   await expect(rows(page)).toContainText("Initech");
 });
 
-test("filters by level and shows it on each job", async ({ page }) => {
+test("internships and jobs each have their own levels, shown on each listing", async ({ page }) => {
   await open(page);
-  await page.getByLabel("Level", { exact: true }).selectOption("entry");
+  const levels = page.getByRole("group", { name: "Experience level", exact: true }).locator("label");
+  await menu(page, "Experience level").click();
+  await expect(levels).toHaveText(["Open to undergrads", "Graduate students only"]);
+  await page.keyboard.press("Escape");
+  await expect(rows(page).first()).toContainText("Internship");
+  await pick(page, "Experience level", "Graduate students only");
+  await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page)).toContainText("Initech");
+
+  await page.getByRole("button", { name: "Jobs", exact: true }).click();
+  await expect(page.getByText("3 jobs, newest first")).toBeVisible();
+  await menu(page, "Experience level").click();
+  await expect(levels).toHaveText(["Entry level", "Mid level", "Senior level"]);
+  await page.keyboard.press("Escape");
+  await expect(menu(page, "Term")).toHaveCount(0);
+  await pick(page, "Experience level", "Entry level");
   await expect(rows(page)).toHaveCount(1);
   await expect(rows(page)).toContainText("Entry level");
-  await page.getByLabel("Level", { exact: true }).selectOption("internship");
-  await expect(rows(page).first()).toContainText("Internship");
+  await pick(page, "Experience level", "Senior level");
+  await expect(rows(page)).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "Experience level: 2 selected" })).toBeVisible();
+});
+
+test("a distance reaches nearby cities, and says so when it can't place the search", async ({ page }) => {
+  await page.route("**/us-places.json", (route) => route.fulfill({ json: { TX: [["Austin", 30.27, -97.74, 900000], ["San Marcos", 29.88, -97.94, 60000]], MA: [["Boston", 42.36, -71.06, 600000]] } }));
+  await open(page);
+  await expect(menu(page, "Distance")).toBeDisabled();
+  await page.getByLabel("Location", { exact: true }).fill("San Marcos, TX");
+  await expect(page.getByText("Nothing matches those filters")).toBeVisible();
+  await pickOne(page, "Distance", "Within 50 miles");
+  await expect(page.getByText("62 internships, newest first")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remove Within 50 miles" })).toBeVisible();
+  await page.getByRole("button", { name: "Remove Within 50 miles" }).click();
+  await expect(page.getByText("Nothing matches those filters")).toBeVisible();
+
+  await pickOne(page, "Distance", "Within 50 miles");
+  await page.getByLabel("Location", { exact: true }).fill("TX");
+  await expect(page.getByText(/Distance needs one city/)).toBeVisible();
+  await expect(page.getByText("62 internships, newest first")).toBeVisible();
+
+  await page.getByLabel("Location", { exact: true }).fill("");
+  await expect(menu(page, "Distance")).toBeDisabled();
+  await expect(page.getByRole("button", { name: /Within 50 miles/ })).toHaveCount(0);
+});
+
+test("a graduation date removes internships that start after it", async ({ page }) => {
+  await page.route("**/internships.json", (route) => route.fulfill({ json: { ...DATA, updated: Date.UTC(2026, 10, 9) / 1000 } }));
+  await page.goto("/");
+  await expect(page.getByText("64 internships, newest first")).toBeVisible();
+  await pickOne(page, "Graduation date", "May 2027");
+  await expect(page.getByText("Nothing matches those filters")).toBeVisible();
+  await pickOne(page, "Graduation date", "December 2027");
+  await expect(page.getByText("64 internships, newest first")).toBeVisible();
+  await pickOne(page, "Graduation date", "Any graduation date");
+  await expect(menu(page, "Graduation date")).toHaveAccessibleName("Graduation date: any");
+});
+
+test("verified companies are marked, and can be the only ones shown", async ({ page }) => {
+  await open(page);
+  await openJobs(page);
+  const hooli = rows(page).filter({ hasText: "Hooli" });
+  await expect(hooli.getByText("Verified", { exact: true })).toBeVisible();
+  await expect(rows(page).filter({ hasText: "Initrode" }).getByText("Verified", { exact: true })).toHaveCount(0);
+  await page.getByLabel("Verified companies").check();
+  await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page)).toContainText("Hooli");
+});
+
+test("a menu closes when you click away, and picks stay when it reopens", async ({ page }) => {
+  await open(page);
+  await menu(page, "Field").click();
+  await page.getByRole("checkbox", { name: "Hardware", exact: true }).check();
+  await expect(page.getByRole("group", { name: "Field", exact: true })).toBeVisible();
+  await page.getByRole("heading", { name: /Internship/ }).first().click();
+  await expect(page.getByRole("group", { name: "Field", exact: true })).toHaveCount(0);
+  await menu(page, "Field").click();
+  await expect(page.getByRole("checkbox", { name: "Hardware", exact: true })).toBeChecked();
+});
+
+test("clearing filters on Saved stays on Saved", async ({ page }) => {
+  await open(page);
+  await page.getByRole("button", { name: "Save Software Intern at Acme" }).click();
+  await page.getByRole("button", { name: "Saved (1)" }).click();
+  await expect(rows(page)).toHaveCount(1);
+  await page.getByLabel("Search by company or role").fill("nothing like this");
+  await expect(page.getByText("Nothing matches those filters")).toBeVisible();
+  await page.getByRole("button", { name: "Clear filters" }).click();
+  await expect(rows(page)).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Saved (1)" })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("a term picked for internships doesn't quietly filter the Jobs tab", async ({ page }) => {
+  await open(page);
+  await pick(page, "Term", "Fall 2027");
+  await page.getByRole("button", { name: "Saved (0)" }).click();
+  await openJobs(page);
+  await expect(page.getByRole("button", { name: "Remove Fall 2027" })).toHaveCount(0);
+});
+
+test("searching while Jobs load doesn't download them again", async ({ page }) => {
+  const asked: string[] = [];
+  await open(page);
+  await page.unroute("**/jobs-mid.json");
+  await page.route("**/jobs-mid.json", async (route) => {
+    asked.push(route.request().url());
+    await new Promise((done) => setTimeout(done, 1500));
+    await route.fulfill({ json: MID });
+  });
+  await page.getByRole("button", { name: "Jobs", exact: true }).click();
+  await page.waitForTimeout(500);
+  await page.getByLabel("Search by company or role").fill("engineer");
+  await expect(page.getByText(/\d+ jobs?, newest first/)).toBeVisible({ timeout: 8000 });
+  expect(asked).toHaveLength(1);
+});
+
+test("several fields can be picked at once", async ({ page }) => {
+  await open(page);
+  await pickField(page, "Hardware");
+  await pickField(page, "Business & Finance");
+  await expect(page.getByRole("button", { name: "Field: 2 selected" })).toBeVisible();
+  await expect(rows(page)).toHaveCount(2);
+  await page.getByRole("button", { name: "Remove Hardware" }).click();
+  await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page)).toContainText("Globex");
 });
 
 test("LA with Remote finds jobs in LA and remote ones", async ({ page }) => {
   await open(page);
+  await openJobs(page);
   await page.getByLabel("Location", { exact: true }).fill("LA");
   await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page)).toContainText("Hooli");
+  await page.getByRole("button", { name: "Internships", exact: true }).click();
   await page.getByLabel("Remote", { exact: true }).check();
-  await expect(rows(page)).toHaveCount(2);
+  await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page)).toContainText("Globex");
 });
 
 test("permanent residents can hide citizens-only jobs", async ({ page }) => {
   await open(page);
   await page.getByLabel("Open to permanent residents").check();
-  await expect(page.getByText("64 jobs, newest first")).toBeVisible();
+  await expect(page.getByText("63 internships, newest first")).toBeVisible();
   await expect(rows(page).filter({ hasText: "Umbrella" })).toHaveCount(0);
 });
 
@@ -212,13 +355,11 @@ test("mid and senior jobs load when asked for", async ({ page }) => {
   await open(page);
   expect(asked).toEqual([]);  // not loaded until someone wants them
 
-  await page.getByLabel("Level", { exact: true }).selectOption("mid");
+  await openJobs(page);
+  await pick(page, "Experience level", "Mid level");
   await expect(rows(page)).toHaveCount(1);
   await expect(rows(page)).toContainText("Initrode");
   await expect(rows(page)).toContainText("Mid level");
-
-  await page.getByLabel("Level", { exact: true }).selectOption("all");
-  await expect(page.getByText("67 jobs, newest first")).toBeVisible();
   expect(asked).toHaveLength(2);  // each file once
 });
 
@@ -228,21 +369,25 @@ test("a level in the address opens it", async ({ page }) => {
   await page.goto("/?level=senior");
   await expect(rows(page)).toHaveCount(1);
   await expect(rows(page)).toContainText("Vandelay");
-  await expect(page.getByLabel("Level", { exact: true })).toHaveValue("senior");
+  await expect(menu(page, "Experience level")).toContainText("Senior level");
 });
 
 test("filters by company size, and shows the size", async ({ page }) => {
   await open(page);
-  await page.getByLabel("Company size", { exact: true }).selectOption({ label: "1,001\u20135,000 employees (1)" });
+  await openJobs(page);
+  await pick(page, "Company size", /^1,001\u20135,000 employees\s*\(1\)$/);
   await expect(rows(page)).toHaveCount(1);
   await expect(rows(page)).toContainText("Hooli \u00b7 1,500 employees");
-  await page.getByLabel("Company size", { exact: true }).selectOption({ index: 1 });
+  await pick(page, "Company size", /^1\u201310 employees/);
+  await expect(rows(page)).toHaveCount(1);
+  await page.getByRole("button", { name: "Remove 1,001\u20135,000 employees" }).click();
   await expect(page.getByText("Company sizes are known for most companies, but not all.")).toBeVisible();
 });
 
 test("saved senior jobs stay listed, and aren't called closed", async ({ page }) => {
   await open(page);
-  await page.getByLabel("Level", { exact: true }).selectOption("senior");
+  await openJobs(page);
+  await pick(page, "Experience level", "Senior level");
   await page.getByRole("button", { name: "Save Staff Engineer at Vandelay" }).click();
   await page.reload();
   await page.getByRole("button", { name: "Saved (1)" }).click();
@@ -266,7 +411,7 @@ test("LinkedIn and Simplify links carry the current search", async ({ page }) =>
 
   const linkedin = new URL((await page.getByRole("link", { name: /on LinkedIn/ }).getAttribute("href"))!);
   expect(linkedin.origin).toBe("https://www.linkedin.com");
-  expect(Object.fromEntries(linkedin.searchParams)).toEqual({ keywords: "data analyst internship", f_E: "1,2", location: "Boston", f_WT: "2" });
+  expect(Object.fromEntries(linkedin.searchParams)).toEqual({ keywords: "data analyst internship", f_E: "1", location: "Boston", f_WT: "2" });
 
   const simplify = new URL((await page.getByRole("link", { name: /on Simplify/ }).getAttribute("href"))!);
   expect(simplify.searchParams.get("q")).toBe("data analyst internship");
@@ -282,6 +427,9 @@ for (const colorScheme of ["light", "dark"] as const) {
   test(`no serious accessibility problems in ${colorScheme} mode`, async ({ page }) => {
     await page.emulateMedia({ colorScheme });
     await open(page);
+    await page.getByLabel("Remote", { exact: true }).check();  // a pill that's on, and a menu that's open, get checked too
+    await expect(rows(page)).toHaveCount(1);
+    await menu(page, "Field").click();
     const { violations } = await new AxeBuilder({ page }).analyze();
     expect(violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id)).toEqual([]);
   });

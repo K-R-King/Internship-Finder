@@ -1,28 +1,40 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
-  age, companySize, extraLevels, filtersFromUrl, inSize, isNew, LEVEL_NAMES, LEVELS, matches, NO_FILTERS, readTracked, searchElsewhere, SIZES,
-  termsIn, type Data, type Filters, type Internship, type Status, type Tracked,
+  age, companySize, extraLevels, filtersFromUrl, graduationOptions, isNew, isVerified, kindOf, LEVEL_NAMES, LEVELS, matches, NO_FILTERS, readTracked, searchElsewhere, SIZES,
+  termsIn, type Data, type Filters, type Internship, type Kind, type LevelChoice, type Status, type Tracked,
 } from "@/lib/internships";
+import { indexPlaces, locate, withinMiles, type Places } from "@/lib/places";
 
 const PAGE = 50;
 const UPDATE_DELAY = 400;  // long enough to finish typing, and to see that results are updating
 const STORAGE_KEY = "internship-finder:tracked";
 const LAST_VISIT_KEY = "internship-finder:last-visit";
 
-const VIEWS: { id: Filters["view"]; label: string }[] = [
-  { id: "all", label: "All jobs" },
-  { id: "saved", label: "Saved" },
-  { id: "applied", label: "Applied" },
+const KINDS: { id: Kind; label: string }[] = [
+  { id: "internship", label: "Internships" },
+  { id: "job", label: "Jobs" },
 ];
 
-const CHECKS: { id: "undergrad" | "remote" | "permanent" | "sponsorship"; label: string }[] = [
+const LISTS: { id: "saved" | "applied"; label: string; icon: keyof typeof ICONS }[] = [
+  { id: "saved", label: "Saved", icon: "bookmark" },
+  { id: "applied", label: "Applied", icon: "check" },
+];
+
+const CHECKS: { id: "remote" | "verified" | "permanent" | "sponsorship"; label: string }[] = [
   { id: "remote", label: "Remote" },
-  { id: "undergrad", label: "Open to undergrads" },
+  { id: "verified", label: "Verified companies" },
   { id: "permanent", label: "Open to permanent residents" },
   { id: "sponsorship", label: "May sponsor visas" },
 ];
+
+const DISTANCES = [
+  { value: "", label: "Only this place" },
+  ...["25", "50", "100", "200"].map((miles) => ({ value: miles, label: `Within ${miles} miles` })),
+];
+
+const VERIFIED_NOTE = "Posted on the employer's own hiring system, by a company found in public company records.";
 
 function loadTracked(items: Internship[]): Tracked {
   try {
@@ -68,9 +80,18 @@ async function loadLevel(level: "mid" | "senior"): Promise<Internship[]> {
   return (await res.json()).items;
 }
 
+async function loadPlaces(): Promise<Places> {
+  const res = await fetch("/us-places.json");
+  if (!res.ok) throw new Error(`us-places.json: ${res.status}`);
+  return indexPlaces(await res.json());
+}
+
 const card = "rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800";
-const control = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm transition hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-slate-600";
+const control = "w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pr-3 pl-10 text-sm transition placeholder:text-slate-500 hover:border-slate-300 focus:bg-white dark:border-slate-700 dark:bg-slate-800/60 dark:placeholder:text-slate-400 dark:hover:border-slate-600 dark:focus:bg-slate-900";
 const chip = "rounded-full px-2 py-0.5";
+const pill = "inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium whitespace-nowrap transition";
+const pillOff = "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-500 dark:hover:bg-slate-800";
+const pillOn = "border-berkeley bg-berkeley/10 text-berkeley dark:border-gold dark:bg-gold/15 dark:text-gold";
 
 const ICONS = {
   search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4.2-4.2",
@@ -80,8 +101,10 @@ const ICONS = {
   clock: "M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z",
   bookmark: "M6 4h12v17l-6-4-6 4z",
   check: "M5 12.5l4.5 4.5L19 7",
+  verified: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8.5 12.2l2.4 2.4 4.6-4.9",
   sliders: "M4 7h9M17 7h3M15 5v4M4 17h3M11 17h9M9 15v4",
   up: "M12 19V5M6 11l6-6 6 6",
+  down: "M6 9l6 6 6-6",
   close: "M7 7l10 10M17 7L7 17",
   external: "M14 5h5v5M19 5l-8 8M18 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h4",
 };
@@ -98,12 +121,12 @@ function Icon({ name, className = "h-3.5 w-3.5", filled = false }: { name: keyof
 function Initials({ name }: { name: string }) {
   let hue = 0;
   for (const c of name) hue = (hue * 31 + c.charCodeAt(0)) % 360;
-  const letters = name.replace(/[^\p{L}\p{N} ]/gu, "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?";
+  const letters = name.replace(/[^\p{L}\p{N} ]/gu, "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => [...w][0]).join("").toUpperCase() || "?";
   return (
     <span
       aria-hidden="true"
       style={{ "--hue": hue } as CSSProperties}
-      className="hidden h-11 w-11 shrink-0 place-items-center rounded-xl bg-[hsl(var(--hue)_70%_93%)] text-sm font-bold text-[hsl(var(--hue)_55%_28%)] sm:grid dark:bg-[hsl(var(--hue)_35%_20%)] dark:text-[hsl(var(--hue)_70%_82%)]"
+      className="hidden h-12 w-12 shrink-0 place-items-center rounded-xl bg-[hsl(var(--hue)_70%_93%)] text-sm font-bold text-[hsl(var(--hue)_55%_28%)] sm:grid dark:bg-[hsl(var(--hue)_35%_20%)] dark:text-[hsl(var(--hue)_70%_82%)]"
     >
       {letters}
     </span>
@@ -113,7 +136,7 @@ function Initials({ name }: { name: string }) {
 function Detail({ icon, children }: { icon: keyof typeof ICONS; children: ReactNode }) {
   return (
     <span className="inline-flex items-center gap-1">
-      <Icon name={icon} className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+      <Icon name={icon} className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
       {children}
     </span>
   );
@@ -137,7 +160,7 @@ function Row({ item, status, closed, fresh, updated, onTrack }: {
       aria-pressed={status === next}
       aria-label={`${label} ${item.title} at ${item.company}`}
       onClick={() => onTrack(item, next)}
-      className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
+      className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition ${
         status === next
           ? "bg-berkeley text-white dark:bg-gold dark:text-berkeley"
           : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
@@ -151,23 +174,31 @@ function Row({ item, status, closed, fresh, updated, onTrack }: {
   return (
     <li
       data-listing={item.id}
-      className={`${card} group flex gap-4 p-4 transition hover:shadow-md hover:ring-slate-300 sm:items-center sm:p-5 dark:hover:ring-slate-600 ${closed ? "opacity-75" : ""}`}
+      className={`${card} flex gap-4 p-4 transition hover:shadow-md hover:ring-slate-300 sm:p-5 dark:hover:ring-slate-600 ${closed ? "opacity-75" : ""}`}
     >
       <Initials name={item.company} />
-      <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <p className="truncate text-sm text-slate-600 dark:text-slate-300">
-            <span className="font-semibold text-slate-900 dark:text-slate-100">{item.company}</span>
-            {size ? ` · ${size}` : ""}
-          </p>
+      <div className="flex min-w-0 flex-1 flex-col gap-3 md:flex-row md:items-center md:gap-5">
+        <div className="min-w-0 flex-1">
           <h3 className="text-base leading-snug font-semibold text-berkeley dark:text-blue-200">{item.title}</h3>
-          <p className="flex flex-wrap gap-x-3.5 gap-y-1 text-xs text-slate-600 dark:text-slate-300">
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-sm text-slate-600 dark:text-slate-300">
+            <span>
+              <span className="font-medium text-slate-900 dark:text-slate-100">{item.company}</span>
+              {size ? ` · ${size}` : ""}
+            </span>
+            {isVerified(item) && (
+              <span title={VERIFIED_NOTE} className="inline-flex items-center gap-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                <Icon name="verified" />
+                Verified
+              </span>
+            )}
+          </p>
+          <p className="mt-2 flex flex-wrap gap-x-3.5 gap-y-1 text-xs text-slate-600 dark:text-slate-300">
             {places && <Detail icon="pin">{places}</Detail>}
             {terms && <Detail icon="calendar">{terms}</Detail>}
             {item.field && <Detail icon="field">{item.field}</Detail>}
             {posted && <Detail icon="clock">{posted}</Detail>}
           </p>
-          <div className="flex flex-wrap gap-1.5 pt-0.5 text-xs font-medium">
+          <div className="mt-2 flex flex-wrap gap-1.5 text-xs font-medium">
             <span className={`${chip} bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200`}>{LEVEL_NAMES[item.type ?? "internship"]}</span>
             {fresh && <span className={`${chip} bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200`}>New</span>}
             {closed && <span className={`${chip} bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200`}>No longer listed</span>}
@@ -177,7 +208,7 @@ function Row({ item, status, closed, fresh, updated, onTrack }: {
             {item.sponsorship === "citizens" && <span className={`${chip} bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200`}>U.S. citizens only</span>}
           </div>
         </div>
-        <div className="flex items-center gap-2 border-t border-slate-100 pt-3 sm:border-0 sm:pt-0 dark:border-slate-800">
+        <div className="flex items-center gap-2 border-t border-slate-100 pt-3 md:border-0 md:pt-0 dark:border-slate-800">
           {toggle("saved", "Save", "Saved", "bookmark")}
           {toggle("applied", "Applied", "Applied", "check")}
           <a
@@ -185,7 +216,7 @@ function Row({ item, status, closed, fresh, updated, onTrack }: {
             target="_blank"
             rel="noopener noreferrer"
             aria-label={`Apply to ${item.title} at ${item.company} (opens in a new tab)`}
-            className="ml-auto inline-flex items-center gap-1 rounded-lg bg-gold px-3.5 py-1.5 text-xs font-semibold text-berkeley shadow-sm transition hover:brightness-95 sm:ml-0"
+            className="ml-auto inline-flex items-center gap-1 rounded-lg bg-gold px-4 py-2 text-xs font-bold text-berkeley shadow-sm transition hover:brightness-95 md:ml-0"
           >
             Apply
             <Icon name="external" />
@@ -196,17 +227,112 @@ function Row({ item, status, closed, fresh, updated, onTrack }: {
   );
 }
 
+/** A pill that opens a list of choices: checkboxes for any number of them, or radio buttons with `single`. */
+function Menu({ caption, options, picked, onChange, single = false, disabled = false, hint }: {
+  caption: string;
+  options: { value: string; label: string; count?: number }[];
+  picked: string[];
+  onChange: (next: string[]) => void;
+  single?: boolean;
+  disabled?: boolean;
+  hint?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [flip, setFlip] = useState(false);  // opens leftward when there's no room on the right
+  const box = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const id = useId();
+  const nameOf = (value: string) => options.find((o) => o.value === value)?.label ?? value;
+  const summary = picked.length === 0 ? caption : picked.length === 1 ? nameOf(picked[0]) : `${caption} (${picked.length})`;
+
+  useEffect(() => {
+    if (!open) return;
+    const outside = (e: PointerEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    const escape = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      button.current?.focus();
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
+
+  function toggle() {
+    const left = button.current?.getBoundingClientRect().left ?? 0;
+    setFlip(left + 272 > window.innerWidth - 16);
+    setOpen(!open);
+  }
+
+  return (
+    // on phones the list spans the filter bar; from sm up it hangs under its own pill
+    <div
+      ref={box}
+      className="sm:relative"
+      onBlur={(e) => { if (e.relatedTarget && !e.currentTarget.contains(e.relatedTarget)) setOpen(false); }}
+    >
+      <button
+        ref={button}
+        type="button"
+        disabled={disabled}
+        title={disabled ? hint : undefined}
+        aria-expanded={open}
+        aria-controls={open ? id : undefined}
+        aria-label={`${caption}: ${picked.length === 0 ? "any" : picked.length === 1 ? nameOf(picked[0]) : `${picked.length} selected`}`}
+        onClick={toggle}
+        className={`${pill} ${picked.length ? pillOn : pillOff} max-w-56 disabled:cursor-not-allowed disabled:opacity-60`}
+      >
+        <span className="truncate">{summary}</span>
+        <Icon name="down" className={`h-3.5 w-3.5 transition ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div
+          id={id}
+          role="group"
+          aria-label={caption}
+          className={`absolute top-full right-0 left-0 z-30 mt-1.5 max-h-80 overflow-y-auto rounded-xl bg-white p-1.5 shadow-xl ring-1 ring-slate-200 sm:right-auto sm:w-68 dark:bg-slate-900 dark:ring-slate-700 ${flip ? "sm:right-0 sm:left-auto" : ""}`}
+        >
+          {options.map((option) => (
+            <label key={option.value} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm select-none hover:bg-slate-100 dark:hover:bg-slate-800">
+              <input
+                type={single ? "radio" : "checkbox"}
+                name={single ? id : undefined}
+                checked={single ? (picked[0] ?? "") === option.value : picked.includes(option.value)}
+                onChange={(e) => {
+                  if (single) {
+                    onChange(option.value ? [option.value] : []);
+                    setOpen(false);
+                    button.current?.focus();
+                  } else {
+                    onChange(e.target.checked ? [...picked, option.value] : picked.filter((p) => p !== option.value));
+                  }
+                }}
+                className="h-4.5 w-4.5 shrink-0 accent-berkeley dark:accent-gold"
+              />
+              <span className="min-w-0 flex-1">{option.label}</span>
+              {option.count !== undefined && <>{" "}<span className="text-xs text-slate-500 dark:text-slate-400">({option.count.toLocaleString()})</span></>}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Loading() {
   return (
     <div role="status" aria-busy="true" className="space-y-3">
       <p className="sr-only">Loading jobs{"…"}</p>
-      <div className={`${card} h-40 animate-pulse`} />
+      <div className={`${card} h-52 animate-pulse`} />
       {[0, 1, 2, 3].map((i) => (
         <div key={i} className={`${card} flex animate-pulse gap-4 p-5`}>
-          <div className="hidden h-11 w-11 rounded-xl bg-slate-200 sm:block dark:bg-slate-800" />
+          <div className="hidden h-12 w-12 rounded-xl bg-slate-200 sm:block dark:bg-slate-800" />
           <div className="flex-1 space-y-2.5">
-            <div className="h-3 w-1/4 rounded bg-slate-200 dark:bg-slate-800" />
             <div className="h-4 w-1/2 rounded bg-slate-200 dark:bg-slate-800" />
+            <div className="h-3 w-1/4 rounded bg-slate-200 dark:bg-slate-800" />
             <div className="h-3 w-2/3 rounded bg-slate-100 dark:bg-slate-800/60" />
           </div>
         </div>
@@ -219,6 +345,7 @@ export default function Finder() {
   const [data, setData] = useState<Data | null>(null);
   const [failed, setFailed] = useState(false);
   const [extra, setExtra] = useState<{ mid?: Internship[]; senior?: Internship[] }>({});
+  const [places, setPlaces] = useState<Places | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);  // what the form shows
   const [applied, setApplied] = useState<Filters | null>(null);  // what the results show; null until known
@@ -226,29 +353,55 @@ export default function Finder() {
   const updateTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const latestUpdate = useRef(0);
   const extraRef = useRef(extra);
+  const placesRef = useRef(places);
+  const downloads = useRef(new Map<string, Promise<unknown>>());
   const [tracked, setTracked] = useState<Tracked>({});
   const [shown, setShown] = useState(PAGE);
   const [since, setSince] = useState<number | null>(null);
-  const [moreOpen, setMoreOpen] = useState(false);  // the extra filters, folded away on phones
+  const [moreOpen, setMoreOpen] = useState(false);  // the filter pills, folded away on phones
   const [scrolled, setScrolled] = useState(false);
 
-  /** Runs the search again, saying so while it does, and loads any level it needs first. */
+  /** Starts a big download once, however many searches are waiting for it; a failed one can be tried again. */
+  function once<T>(key: string, load: () => Promise<T>): Promise<T> {
+    let download = downloads.current.get(key) as Promise<T> | undefined;
+    if (!download) {
+      download = load().catch((err) => {
+        downloads.current.delete(key);
+        throw err;
+      });
+      downloads.current.set(key, download);
+    }
+    return download;
+  }
+
+  /** Runs the search again, saying so while it does, and loads anything it needs first. */
   function update(next: Filters, delay = UPDATE_DELAY) {
     const id = ++latestUpdate.current;
     setUpdating(true);
     clearTimeout(updateTimer.current);
     updateTimer.current = setTimeout(async () => {
-      const missing = extraLevels(next.level).filter((level) => !extraRef.current[level]);
+      const missing = extraLevels(next.kind, next.level).filter((level) => !extraRef.current[level]);
+      const needsMap = Boolean(next.miles && next.location.trim()) && !placesRef.current;
+      let problem: string | null = null;
       try {
-        const loaded = await Promise.all(missing.map(async (level) => [level, await loadLevel(level)] as const));
-        extraRef.current = { ...extraRef.current, ...Object.fromEntries(loaded) };
-        setExtra(extraRef.current);
-        setNotice(null);
+        const [levels, map] = await Promise.all([
+          Promise.all(missing.map(async (level) => [level, await once(level, () => loadLevel(level))] as const)),
+          needsMap ? once("places", loadPlaces) : null,
+        ]);
+        if (levels.length) {
+          extraRef.current = { ...extraRef.current, ...Object.fromEntries(levels) };
+          setExtra(extraRef.current);
+        }
+        if (map) {
+          placesRef.current = map;
+          setPlaces(map);
+        }
       } catch (err) {
         console.error(err);
-        setNotice("Couldn't load every level just now. Search again to retry.");
+        problem = "Couldn't load everything just now. Search again to retry.";
       }
       if (id !== latestUpdate.current) return;
+      setNotice(problem);
       setApplied(next);
       setShown(PAGE);
       setUpdating(false);
@@ -267,7 +420,7 @@ export default function Finder() {
         setSince(lastVisit());
         const fromAddress = { ...NO_FILTERS, ...filtersFromUrl(window.location.search, loaded.items) };
         setFilters(fromAddress);
-        if (extraLevels(fromAddress.level).length) update(fromAddress, 0);
+        if (extraLevels(fromAddress.kind, fromAddress.level).length) update(fromAddress, 0);
         else setApplied(fromAddress);
       })
       .catch((err) => {
@@ -284,26 +437,46 @@ export default function Finder() {
   }, []);
 
   const everything = useMemo(() => [...(data?.items ?? []), ...(extra.mid ?? []), ...(extra.senior ?? [])], [data, extra]);
+  const appliedPlace = applied?.miles ? applied.location.trim() : "";
+  const center = useMemo(() => (places && appliedPlace ? locate(places, appliedPlace) : null), [places, appliedPlace]);
+  const appliedMiles = Number(applied?.miles) || 0;
+  const within = useMemo(() => (places && center && appliedMiles ? withinMiles(places, center, appliedMiles) : undefined), [places, center, appliedMiles]);
   const results = useMemo(() => {
     if (!applied) return [];
     const pool = applied.view === "all"
       ? everything
       : Object.values(tracked).filter((t) => t.status === applied.view).map((t) => t.item);
-    // a saved list shows every level unless one is picked
-    const filters = applied.view === "all" || applied.level ? applied : { ...applied, level: "all" as const };
-    return pool.filter((item) => matches(item, filters, since));
-  }, [everything, applied, tracked, since]);
+    return pool.filter((item) => matches(item, applied, since, applied.view !== "all", within));
+  }, [everything, applied, tracked, since, within]);
   const loaded = (item: Internship) => item.type !== "mid" && item.type !== "senior" ? true : Boolean(extra[item.type]);
-  const newCount = useMemo(() => (data?.items ?? []).filter((item) => isNew(item, since)).length, [data, since]);
   const open = useMemo(() => new Set(everything.map((i) => i.url)), [everything]);
-  const fields = useMemo(() => [...new Set(everything.map((i) => i.field))].sort(), [everything]);
-  const terms = useMemo(() => termsIn(everything), [everything]);
-  const sizeCounts = useMemo(() => SIZES.map((_, size) => everything.filter((i) => inSize(i, size)).length), [everything]);
+  // the menus describe the tab that's open
+  const browsing = filters.view === "all";
+  const listed = useMemo(() => (browsing ? everything.filter((i) => kindOf(i) === filters.kind) : everything), [everything, browsing, filters.kind]);
+  const newCount = useMemo(() => listed.filter((item) => isNew(item, since)).length, [listed, since]);
+  const fields = useMemo(() => [...new Set(listed.map((i) => i.field))].sort(), [listed]);
+  const terms = useMemo(() => termsIn(listed), [listed]);
+  const sizeCounts = useMemo(() => {
+    const counts = SIZES.map(() => 0);
+    for (const item of listed) if (item.band !== undefined && counts[item.band] !== undefined) counts[item.band]++;
+    return counts;
+  }, [listed]);
 
   function change(next: Partial<Filters>) {
     const changed = { ...filters, ...next };
     setFilters(changed);
     update(changed);
+  }
+
+  /** Opens the Internships or Jobs tab. Levels belong to one tab, and jobs have no term to filter by. */
+  function pickKind(kind: Kind) {
+    change({ kind, view: "all", ...(kind !== filters.kind && { level: [] }), ...(kind === "job" && { term: [] }) });
+  }
+
+  function reset(view: Filters["view"]) {
+    const cleared = { ...NO_FILTERS, kind: filters.kind, view };
+    setFilters(cleared);
+    update(cleared, 0);
   }
 
   function track(item: Internship, status: Status) {
@@ -320,46 +493,71 @@ export default function Finder() {
   // while a link's level loads, show nothing rather than the wrong jobs
   if (!data || !applied) return <Loading />;
 
-  const count = (view: Filters["view"]) => (view === "all" ? everything.length : Object.values(tracked).filter((t) => t.status === view).length);
+  const count = (view: Status) => Object.values(tracked).filter((t) => t.status === view).length;
   const emptyList = applied.view !== "all" && count(applied.view) === 0;
+  const noun = applied.view === "all" && applied.kind === "internship" ? "internship" : "job";
+  const showTerm = !browsing || filters.kind === "internship";  // jobs almost never name a term
+  const hasPlace = filters.location.trim() !== "";
+  const grads = graduationOptions(data.updated);
+  const levelName = (id: LevelChoice) => LEVELS[filters.kind].find((l) => l.id === id)?.label ?? id;
+  const tab = (on: boolean) => `inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition ${
+    on ? "bg-berkeley text-white shadow-sm dark:bg-gold dark:text-berkeley" : "text-slate-700 hover:bg-slate-200 dark:text-slate-200 dark:hover:bg-slate-700"
+  }`;
 
   // the filters in use, each removable on its own
+  const without = (list: string[], value: string) => list.filter((v) => v !== value);
   const active: { label: string; clear: Partial<Filters> }[] = [
     ...(filters.query.trim() ? [{ label: `“${filters.query.trim()}”`, clear: { query: "" } }] : []),
-    ...(filters.location.trim() ? [{ label: `Near ${filters.location.trim()}`, clear: { location: "" } }] : []),
-    ...(filters.level ? [{ label: LEVELS.find((l) => l.id === filters.level)?.label ?? filters.level, clear: { level: "" as const } }] : []),
-    ...(filters.field ? [{ label: filters.field, clear: { field: "" } }] : []),
-    ...(filters.term ? [{ label: filters.term, clear: { term: "" } }] : []),
-    ...(filters.size && SIZES[Number(filters.size)] ? [{ label: SIZES[Number(filters.size)].label, clear: { size: "" } }] : []),
+    ...(hasPlace ? [{ label: `Near ${filters.location.trim()}`, clear: { location: "", miles: "" } }] : []),
+    ...(hasPlace && filters.miles ? [{ label: `Within ${filters.miles} miles`, clear: { miles: "" } }] : []),
+    ...(browsing ? filters.level.map((id) => ({ label: levelName(id), clear: { level: filters.level.filter((l) => l !== id) } })) : []),
+    ...filters.field.map((name) => ({ label: name, clear: { field: without(filters.field, name) } })),
+    ...filters.term.map((term) => ({ label: term, clear: { term: without(filters.term, term) } })),
+    ...(filters.grad ? [{ label: `Graduating ${grads.find((g) => g.value === filters.grad)?.label ?? filters.grad}`, clear: { grad: "" } }] : []),
+    ...filters.size.map((size) => ({ label: SIZES[Number(size)]?.label ?? size, clear: { size: without(filters.size, size) } })),
     ...CHECKS.filter((c) => filters[c.id]).map((c) => ({ label: c.label, clear: { [c.id]: false } })),
     ...(filters.fresh ? [{ label: "New since last visit", clear: { fresh: false } }] : []),
   ];
-  const folded = [filters.level, filters.field, filters.term, filters.size].filter(Boolean).length
-    + CHECKS.filter((c) => filters[c.id]).length + (filters.fresh ? 1 : 0);
-  const clearAll = () => {
-    const cleared = { ...NO_FILTERS, view: filters.view };
-    setFilters(cleared);
-    update(cleared, 0);
-  };
+  const folded = (browsing ? filters.level.length : 0) + filters.field.length + filters.term.length + filters.size.length
+    + (filters.grad ? 1 : 0) + (hasPlace && filters.miles ? 1 : 0) + CHECKS.filter((c) => filters[c.id]).length + (filters.fresh ? 1 : 0);
+  const unplaced = appliedPlace !== "" && places !== null && center === null;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <form
         aria-label="Filters"
         onSubmit={(e) => {
           e.preventDefault();
           update(filters, 150);
         }}
-        className={`${card} space-y-4 p-4 shadow-lg shadow-slate-900/5 sm:p-5`}
+        className={`${card} relative space-y-4 p-4 shadow-lg shadow-slate-900/5 sm:p-5`}
       >
+        <div role="group" aria-label="Show" className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+            {KINDS.map((k) => (
+              <button key={k.id} type="button" aria-pressed={browsing && filters.kind === k.id} onClick={() => pickKind(k.id)} className={tab(browsing && filters.kind === k.id)}>
+                {k.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+            {LISTS.map((l) => (
+              <button key={l.id} type="button" aria-pressed={filters.view === l.id} onClick={() => change({ view: l.id })} className={tab(filters.view === l.id)}>
+                <Icon name={l.icon} />
+                {l.label} ({count(l.id).toLocaleString()})
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
           <div className="relative">
-            <Icon name="search" className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input aria-label="Search by company or role" placeholder="Company or role" value={filters.query} onChange={(e) => change({ query: e.target.value })} className={`${control} pl-9`} />
+            <Icon name="search" className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-slate-400" />
+            <input aria-label="Search by company or role" placeholder="Company or role" value={filters.query} onChange={(e) => change({ query: e.target.value })} className={control} />
           </div>
           <div className="relative">
-            <Icon name="pin" className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input aria-label="Location" placeholder="U.S. city or state, e.g. LA or CA" value={filters.location} onChange={(e) => change({ location: e.target.value })} className={`${control} pl-9`} />
+            <Icon name="pin" className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-slate-400" />
+            <input aria-label="Location" placeholder="U.S. city or state, e.g. LA or CA" value={filters.location} onChange={(e) => change({ location: e.target.value, ...(e.target.value.trim() ? {} : { miles: "" }) })} className={control} />
           </div>
           <div className="flex gap-2">
             <button
@@ -367,44 +565,35 @@ export default function Finder() {
               aria-expanded={moreOpen}
               aria-controls="more-filters"
               onClick={() => setMoreOpen(!moreOpen)}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 sm:hidden dark:border-slate-700 dark:text-slate-200"
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 sm:hidden dark:border-slate-700 dark:text-slate-200"
             >
               <Icon name="sliders" className="h-4 w-4" />
               Filters{folded ? ` (${folded})` : ""}
             </button>
-            <button type="submit" className="flex-1 rounded-xl bg-gold px-6 py-2.5 text-sm font-semibold text-berkeley shadow-sm transition hover:brightness-95">Search</button>
+            <button type="submit" className="flex-1 rounded-xl bg-gold px-7 py-3 text-sm font-bold text-berkeley shadow-sm transition hover:brightness-95">Search</button>
           </div>
         </div>
-        <div id="more-filters" className={`${moreOpen ? "" : "hidden"} space-y-4 sm:block`}>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <select aria-label="Level" value={filters.level} onChange={(e) => change({ level: e.target.value as Filters["level"] })} className={`${control} col-span-2 sm:col-span-1`}>
-              {LEVELS.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
-            </select>
-            <select aria-label="Field" value={filters.field} onChange={(e) => change({ field: e.target.value })} className={control}>
-              <option value="">All fields</option>
-              {fields.map((f) => <option key={f}>{f}</option>)}
-            </select>
-            <select aria-label="Term" value={filters.term} onChange={(e) => change({ term: e.target.value })} className={control}>
-              <option value="">Any term</option>
-              {terms.map((t) => <option key={t}>{t}</option>)}
-            </select>
-            <select aria-label="Company size" value={filters.size} onChange={(e) => change({ size: e.target.value })} className={`${control} col-span-2 sm:col-span-1`}>
-              <option value="">Any company size</option>
-              {SIZES.map((s, i) => <option key={s.label} value={String(i)}>{s.label} ({sizeCounts[i].toLocaleString()})</option>)}
-            </select>
-          </div>
-          <div className="flex flex-wrap gap-2 text-sm text-slate-700 dark:text-slate-200">
-            {[...CHECKS, ...(newCount > 0 ? [{ id: "fresh" as const, label: `New since last visit (${newCount.toLocaleString()})` }] : [])].map((c) => (
-              <label
-                key={c.id}
-                className="flex cursor-pointer items-center gap-2 rounded-full px-3 py-1.5 ring-1 ring-slate-200 transition select-none hover:bg-slate-50 has-checked:bg-berkeley/5 has-checked:font-medium has-checked:text-berkeley has-checked:ring-berkeley/60 dark:ring-slate-700 dark:hover:bg-slate-800 dark:has-checked:bg-gold/10 dark:has-checked:text-gold dark:has-checked:ring-gold/60"
-              >
-                <input type="checkbox" checked={filters[c.id]} onChange={(e) => change({ [c.id]: e.target.checked })} className="h-4 w-4 accent-berkeley dark:accent-gold" />
-                {c.label}
-              </label>
-            ))}
-          </div>
+
+        <div id="more-filters" className={`${moreOpen ? "flex" : "hidden"} relative flex-wrap items-center gap-2 sm:flex`}>
+          {browsing && (
+            <Menu caption="Experience level" options={LEVELS[filters.kind].map((l) => ({ value: l.id, label: l.label }))} picked={filters.level} onChange={(level) => change({ level: level as LevelChoice[] })} />
+          )}
+          {/* what's picked stays on the menu, even before its tab's listings arrive */}
+          <Menu caption="Field" options={[...new Set([...fields, ...filters.field])].sort().map((f) => ({ value: f, label: f }))} picked={filters.field} onChange={(field) => change({ field })} />
+          {showTerm && (
+            <Menu caption="Term" options={[...new Set([...terms, ...filters.term])].map((t) => ({ value: t, label: t }))} picked={filters.term} onChange={(term) => change({ term })} />
+          )}
+          <Menu caption="Graduation date" single options={[{ value: "", label: "Any graduation date" }, ...grads]} picked={filters.grad ? [filters.grad] : []} onChange={([grad = ""]) => change({ grad })} />
+          <Menu caption="Company size" options={SIZES.map((s, i) => ({ value: String(i), label: s.label, count: sizeCounts[i] }))} picked={filters.size} onChange={(size) => change({ size })} />
+          <Menu caption="Distance" single disabled={!hasPlace} hint="Type a city first" options={DISTANCES} picked={hasPlace && filters.miles ? [filters.miles] : []} onChange={([miles = ""]) => change({ miles })} />
+          {[...CHECKS, ...(newCount > 0 || filters.fresh ? [{ id: "fresh" as const, label: `New since last visit (${newCount.toLocaleString()})` }] : [])].map((c) => (
+            <label key={c.id} className={`${pill} ${filters[c.id] ? pillOn : pillOff} cursor-pointer select-none`}>
+              <input type="checkbox" checked={filters[c.id]} onChange={(e) => change({ [c.id]: e.target.checked })} className="h-4 w-4 accent-berkeley dark:accent-gold" />
+              {c.label}
+            </label>
+          ))}
         </div>
+
         {active.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 text-xs dark:border-slate-800">
             {active.map((a) => (
@@ -419,35 +608,26 @@ export default function Finder() {
                 <Icon name="close" className="h-3 w-3 text-slate-500 dark:text-slate-400" />
               </button>
             ))}
-            <button type="button" onClick={clearAll} className="px-1 font-semibold text-berkeley underline-offset-2 hover:underline dark:text-gold">
+            <button type="button" onClick={() => reset(filters.view)} className="px-1 font-semibold text-berkeley underline-offset-2 hover:underline dark:text-gold">
               Clear all
             </button>
           </div>
         )}
       </form>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex gap-1 rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800" role="group" aria-label="Show">
-          {VIEWS.map((v) => (
-            <button
-              key={v.id}
-              type="button"
-              aria-pressed={filters.view === v.id}
-              onClick={() => change({ view: v.id })}
-              className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
-                filters.view === v.id ? "bg-berkeley text-white dark:bg-gold dark:text-berkeley" : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-              }`}
-            >
-              {v.id === "all" ? v.label : `${v.label} (${count(v.id).toLocaleString()})`}
-            </button>
-          ))}
-        </div>
-        <p aria-live="polite" className={`text-sm ${updating ? "font-semibold text-berkeley dark:text-gold" : "text-slate-600 dark:text-slate-300"}`}>
-          {updating ? "Updating results…" : `${results.length.toLocaleString()} job${results.length === 1 ? "" : "s"}, newest first`}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-1">
+        <p aria-live="polite" className={`text-sm ${updating ? "font-semibold text-berkeley dark:text-gold" : "font-medium text-slate-700 dark:text-slate-200"}`}>
+          {updating ? "Updating results…" : `${results.length.toLocaleString()} ${noun}${results.length === 1 ? "" : "s"}, newest first`}
         </p>
+        <p className="text-xs text-slate-600 dark:text-slate-300">Updated {new Date(data.updated * 1000).toLocaleDateString(undefined, { dateStyle: "medium" })}</p>
       </div>
 
       {notice && <p role="status" className="rounded-xl bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">{notice}</p>}
+      {unplaced && !updating && (
+        <p role="status" className="rounded-xl bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+          Distance needs one city, like Austin, TX. Couldn&apos;t place &ldquo;{appliedPlace}&rdquo; on the map, so this shows that exact place only.
+        </p>
+      )}
 
       <ul className={`space-y-3 transition-opacity ${updating ? "opacity-50" : ""}`}>
         {results.slice(0, shown).map((item) => (
@@ -457,15 +637,15 @@ export default function Finder() {
 
       {results.length === 0 && !updating && (
         <div className={`${card} p-10 text-center`}>
-          <Icon name={emptyList ? "bookmark" : "search"} className="mx-auto mb-3 h-8 w-8 text-slate-300 dark:text-slate-600" />
+          <Icon name={emptyList ? "bookmark" : "search"} className="mx-auto mb-3 h-8 w-8 text-slate-400 dark:text-slate-500" />
           <p className="font-semibold">
             {emptyList ? `Nothing ${applied.view === "saved" ? "saved" : "marked as applied"} yet` : "Nothing matches those filters"}
           </p>
-          {applied.size !== "" && !emptyList && (
+          {applied.size.length > 0 && !emptyList && (
             <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Company sizes are known for most companies, but not all.</p>
           )}
-          <button type="button" onClick={() => { setFilters(NO_FILTERS); update(NO_FILTERS, 0); }} className="mt-4 rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-berkeley">
-            {emptyList ? "See all jobs" : "Clear filters"}
+          <button type="button" onClick={() => reset(emptyList ? "all" : applied.view)} className="mt-4 rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-berkeley">
+            {emptyList ? `See all ${filters.kind === "internship" ? "internships" : "jobs"}` : "Clear filters"}
           </button>
         </div>
       )}
@@ -499,10 +679,11 @@ export default function Finder() {
       </section>
 
       <footer className="pt-4 text-center text-xs text-slate-600 dark:text-slate-300">
-        <p>Updated {new Date(data.updated * 1000).toLocaleDateString(undefined, { dateStyle: "medium" })} from {data.sources.filter((s) => s.ok || s.count).map((s) => s.name).join(", ")}.</p>
+        <p>From {data.sources.filter((s) => s.ok || s.count).map((s) => s.name).join(", ")}.</p>
         <p className="mx-auto mt-1 max-w-3xl">
-          Not every job is here, so try the other sites too. Company sizes come from Wikidata and BigPicture&apos;s free company dataset (ODC-BY, late 2023), are approximate and not known for every company, and few
-          listings state work authorization, so check each one. Always confirm details on the company&apos;s own page.
+          Not every job is here, so try the other sites too. &ldquo;Verified&rdquo; means posted on the employer&apos;s own hiring system by a company found in public company records; it isn&apos;t a guarantee, so still check each listing.
+          Company sizes come from Wikidata and BigPicture&apos;s free company dataset (ODC-BY, late 2023), are approximate and not known for every company. Distances use GeoNames (CC BY 4.0). Few listings state work authorization or a graduation date,
+          so the graduation filter only removes listings that rule you out. Always confirm details on the company&apos;s own page.
         </p>
       </footer>
 
