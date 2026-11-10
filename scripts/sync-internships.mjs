@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { readBands } from "./company-bands.mjs";
 import {
   dedupe, fromAshby, fromGreenhouse, fromLever, fromMuse, fromNewGrad, fromSimplify, fromSmartRecruiters, fromVansh,
-  fromWorkday, isHttpUrl, isShortLink, jobType, keep, pageOf, parseBoardLink, parseCareerSite, usOnly, withoutEndedTerms,
+  fromWorkday, isHttpUrl, isShortLink, jobType, keep, pageOf, parseBoardLink, parseCareerSite, rowsFromTable, usOnly, withoutEndedTerms,
   simpleCompany, sizeBand,
 } from "../lib/normalize.mjs";
 
@@ -29,6 +29,14 @@ const LISTS = [
   { name: "SimplifyJobs new grad list", url: "https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json", convert: fromNewGrad },
   { name: "Summer Internships list", url: "https://raw.githubusercontent.com/vanshb03/Summer2027-Internships/dev/.github/scripts/listings.json", convert: (row) => fromVansh(row) },
 ];
+
+// More public lists, read only to find companies' job boards. Their listings aren't used: the boards give those directly.
+const MORE_BOARD_LISTS = [
+  "speedyapply/2027-SWE-College-Jobs/main/README.md",
+  "speedyapply/2027-SWE-College-Jobs/main/NEW_GRAD_USA.md",
+  "speedyapply/2027-AI-College-Jobs/main/README.md",
+  "speedyapply/2027-AI-College-Jobs/main/NEW_GRAD_USA.md",
+].map((path) => `https://raw.githubusercontent.com/${path}`);
 
 // The Muse allows 500 requests an hour without a key, and 100 pages of 20 per search. Newest jobs come first.
 const MUSE_PAGES = 99;
@@ -95,6 +103,17 @@ function findCompanies(rows) {
     if (site && !sites.has(`${site.kind}/${site.token}`)) sites.set(`${site.kind}/${site.token}`, { ...site, company: row.company_name });
   }
   return { boards: [...boards.values()], sites: [...sites.values()] };
+}
+
+/** Rows from the extra lists. One that fails only means fewer companies to read today. */
+async function moreBoardRows() {
+  const results = await inBatches(MORE_BOARD_LISTS.map((url) => async () => {
+    const res = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(60_000) });
+    if (!res.ok) throw new Error(`${res.status} from ${url}`);
+    return rowsFromTable(await res.text());
+  }));
+  results.filter((r) => r.status === "rejected").forEach((r) => console.warn(`A list of job boards failed: ${r.reason.message}`));
+  return results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
 }
 
 /** Each board's wanted jobs, and its open job ids, used later to spot listings that have closed. */
@@ -270,7 +289,8 @@ async function main() {
     }));
   }
 
-  const { boards, sites } = findCompanies(allRows);
+  // the main lists come first, so their company names win
+  const { boards, sites } = findCompanies([...allRows, ...await moreBoardRows()]);
   console.log(`${boards.length} job boards and ${sites.length} career sites to read`);
   const board = await readBoards(boards);
   report.push({ name: "Company job boards", count: board.items.length, ok: board.failed < boards.length / 2 });
@@ -314,8 +334,8 @@ async function main() {
   console.log("by level", Object.fromEntries(["internship", "entry", "mid", "senior"].map((level) => [level, ofLevels(level).length])));
   console.log(`${items.filter((item) => item.band !== undefined).length} with a company size; ${items.filter((item) => isShortLink(item.url)).length} short links left`);
 
-  // the listings are saved, but a missing list is worth knowing about
-  if (report.some((source) => !source.ok && source.name !== "Workday" && source.name !== "SmartRecruiters")) process.exitCode = 1;
+  // the listings are saved, but a missing list is worth knowing about. The Muse closed its public API in November 2026.
+  if (report.some((source) => !source.ok && !["Workday", "SmartRecruiters", "The Muse"].includes(source.name))) process.exitCode = 1;
 }
 
 await main();

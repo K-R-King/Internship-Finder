@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { companySize, extraLevels, filtersFromUrl, fitsMajor, fitsGraduation, graduationOptions, graduationYears, inPlace, isNew, isVerified, matches, NO_FILTERS, readTracked, searchElsewhere, SIZES, termsIn, type Internship, type Level } from "@/lib/internships";
 import { indexPlaces, locate, milesBetween, withinMiles, type PlaceTable } from "@/lib/places";
-import { dedupe, fieldOf, fromGreenhouse, fromMuse, fromNewGrad, fromSimplify, fromSmartRecruiters, fromVansh, fromWorkday, isEntryLevel, isInternship, shortId, isUSPlace, jobType, keep, parseBoardLink, parseCareerSite, termHasPassed, termsIn as termsInTitle, usOnly, withoutEndedTerms, withYear, BANDS, sizeBand } from "@/lib/normalize.mjs";
+import { dedupe, fieldOf, fromGreenhouse, fromMuse, fromNewGrad, fromSimplify, fromSmartRecruiters, fromVansh, fromWorkday, rowsFromTable, isEntryLevel, isInternship, shortId, isUSPlace, jobType, keep, parseBoardLink, parseCareerSite, termHasPassed, termsIn as termsInTitle, usOnly, withoutEndedTerms, withYear, BANDS, sizeBand } from "@/lib/normalize.mjs";
 import { csvFields, matchScore } from "../scripts/company-bands.mjs";
 import { simpleCompany } from "@/lib/normalize.mjs";
 
@@ -721,6 +721,32 @@ describe("distance", () => {
     const job = { company: "A", title: "B", locations: ["Santa Monica, CA"], terms: [] } as unknown as Internship;
     expect(matches(job, { ...NO_FILTERS, location: "Pasadena" })).toBe(false);
     expect(matches(job, { ...NO_FILTERS, location: "Pasadena", miles: "50" }, null, false, near)).toBe(true);
+  });
+});
+
+describe("rowsFromTable", () => {
+  it("pairs each link with the row's company", () => {
+    const text = [
+      "| Company | Position | Apply |",
+      "|---|---|---|",
+      '| <a href="https://www.figma.com"><strong>Figma</strong></a> | Intern | <a href="https://boards.greenhouse.io/figma/jobs/1?gh_jid=1"><img src="x" alt="Apply"/></a> |',
+      "| **[Acme](https://acme.com)** | Intern | [Apply](https://jobs.lever.co/acme/1) |",
+      "not a table https://jobs.lever.co/other",
+    ].join("\n");
+    const rows = rowsFromTable(text);
+    expect(rows.filter((r: { url: string }) => /greenhouse|lever/.test(r.url))).toEqual([
+      { url: "https://boards.greenhouse.io/figma/jobs/1?gh_jid=1", company_name: "Figma" },
+      { url: "https://jobs.lever.co/acme/1", company_name: "Acme" },
+    ]);
+  });
+
+  it("skips rows with no company", () => {
+    expect(rowsFromTable("|  | Intern | https://jobs.lever.co/a |\n| \u21b3 | Intern | https://jobs.lever.co/b |")).toEqual([]);
+  });
+
+  it("finds the boards the rows link to", () => {
+    const [row] = rowsFromTable("| Figma | https://boards.greenhouse.io/figma/jobs/1 |");
+    expect(parseBoardLink(row.url)).toMatchObject({ kind: "greenhouse", token: "figma" });
   });
 });
 
