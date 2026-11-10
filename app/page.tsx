@@ -4,16 +4,16 @@ import SuiteNav from "@/components/SuiteNav";
 export default function Home() {
   return (
     <>
-      <header className="relative overflow-hidden bg-berkeley bg-linear-to-br from-berkeley-dark via-berkeley to-[#0b4a7a] px-4 pt-12 pb-16 text-white">
+      <header className="relative overflow-hidden bg-berkeley bg-linear-to-br from-berkeley-dark via-berkeley to-[#0b4a7a] px-4 pt-8 pb-14 text-white sm:pt-12 sm:pb-16">
         <div className="hero-grid pointer-events-none absolute inset-0" />
         <div className="relative mx-auto max-w-5xl">
-          <div className="mb-6 flex justify-end">
+          <div className="mb-5 flex justify-end sm:mb-6">
             <SuiteNav current="internships" />
           </div>
-          <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl">
+          <h1 className="text-3xl font-extrabold tracking-tight sm:text-5xl">
             Internship <span className="text-gold">Finder</span>
           </h1>
-          <p className="mt-3 max-w-xl text-blue-100">
+          <p className="mt-3 max-w-xl text-sm text-blue-100 sm:text-base">
             U.S. internships and entry-level jobs for university students, gathered from company job boards and public job lists into one search.
           </p>
         </div>

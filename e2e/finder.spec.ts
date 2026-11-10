@@ -106,6 +106,28 @@ test("damaged saved data doesn't break the page", async ({ page }) => {
   await expect(page.getByText("65 jobs, newest first")).toBeVisible();
 });
 
+test("each filter in use can be removed on its own", async ({ page }) => {
+  await open(page);
+  await page.getByLabel("Remote", { exact: true }).check();
+  await page.getByLabel("Field", { exact: true }).selectOption("Hardware");
+  await expect(page.getByText("Nothing matches those filters")).toBeVisible();
+  await page.getByRole("button", { name: "Remove Hardware" }).click();
+  await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page)).toContainText("Globex");
+  await page.getByRole("button", { name: "Clear all" }).click();
+  await expect(page.getByText("65 jobs, newest first")).toBeVisible();
+});
+
+test("on a phone, the extra filters fold away until asked for", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await open(page);
+  await expect(page.getByLabel("Field", { exact: true })).toBeHidden();
+  await page.getByRole("button", { name: "Filters", exact: true }).click();
+  await page.getByLabel("Field", { exact: true }).selectOption("Hardware");
+  await expect(rows(page)).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Filters (1)" })).toBeVisible();
+});
+
 test("two letters search for a state", async ({ page }) => {
   await open(page);
   await page.getByLabel("Location", { exact: true }).fill("TX");
