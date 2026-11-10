@@ -1,3 +1,5 @@
+import { STATES } from "./places";
+
 export interface Internship {
   id: string;
   company: string;
@@ -23,6 +25,8 @@ export interface Data {
 }
 
 export type Level = "internship" | "entry" | "mid" | "senior";
+export type Kind = "internship" | "job";
+export type LevelChoice = "undergrad" | "grad" | "entry" | "mid" | "senior";
 export type Status = "saved" | "applied";
 
 /** Keyed by listing page, with a copy of the listing so it stays here after it closes. */
@@ -31,11 +35,14 @@ export type Tracked = Record<string, { status: Status; item: Internship }>;
 export interface Filters {
   query: string;
   location: string;
-  field: string;     // "" means any
-  term: string;      // e.g. "Summer 2027"; "" means any
-  level: Level | "" | "all";  // "" means internships and entry level
-  size: string;               // index into SIZES (one per size band); "" means any
-  undergrad: boolean;
+  field: string[];   // any of these; empty means any field
+  term: string[];    // any of these, e.g. "Summer 2027"; empty means any term
+  kind: Kind;
+  level: LevelChoice[];  // any of these, within the kind; empty means all of it
+  size: string[];        // any of these indexes into SIZES; empty means any
+  miles: string;         // how far from the location to look; "" means only the place named
+  grad: string;          // when the student graduates, "2027-05"; "" means any
+  verified: boolean;     // only listings from verified companies
   remote: boolean;
   sponsorship: boolean;  // hide listings that rule out visa sponsorship
   permanent: boolean;    // hide listings only for U.S. citizens
@@ -44,23 +51,94 @@ export interface Filters {
 }
 
 export const NO_FILTERS: Filters = {
-  query: "", location: "", field: "", term: "", level: "", size: "", undergrad: false, remote: false, sponsorship: false, permanent: false, fresh: false, view: "all",
+  query: "", location: "", field: [], term: [], kind: "internship", level: [], size: [], miles: "", grad: "", verified: false, remote: false, sponsorship: false, permanent: false, fresh: false, view: "all",
 };
 
-export const LEVELS: { id: Filters["level"]; label: string }[] = [
-  { id: "", label: "Internships and entry level" },
-  { id: "internship", label: "Internships" },
-  { id: "entry", label: "Entry level" },
-  { id: "mid", label: "Mid level" },
-  { id: "senior", label: "Senior level" },
-  { id: "all", label: "All levels" },
-];
+// internships have no entry, mid or senior; what sets them apart is who can apply
+export const LEVELS: Record<Kind, { id: LevelChoice; label: string }[]> = {
+  internship: [
+    { id: "undergrad", label: "Open to undergrads" },
+    { id: "grad", label: "Graduate students only" },
+  ],
+  job: [
+    { id: "entry", label: "Entry level" },
+    { id: "mid", label: "Mid level" },
+    { id: "senior", label: "Senior level" },
+  ],
+};
 
 export const LEVEL_NAMES: Record<Level, string> = { internship: "Internship", entry: "Entry level", mid: "Mid level", senior: "Senior level" };
 
+export const kindOf = (item: Internship): Kind => ((item.type ?? "internship") === "internship" ? "internship" : "job");
+
 /** Levels kept in their own files, loaded only when someone asks for them. */
-export function extraLevels(level: Filters["level"]): ("mid" | "senior")[] {
-  return level === "all" ? ["mid", "senior"] : level === "mid" || level === "senior" ? [level] : [];
+export function extraLevels(kind: Kind, levels: LevelChoice[]): ("mid" | "senior")[] {
+  if (kind !== "job") return [];
+  return (["mid", "senior"] as const).filter((level) => levels.length === 0 || levels.includes(level));
+}
+
+/** Whether a listing is the kind and level asked for. */
+export function inLevel(item: Internship, kind: Kind, levels: LevelChoice[]): boolean {
+  if (kindOf(item) !== kind) return false;
+  if (levels.length === 0) return true;
+  return levels.some((level) => (level === "undergrad" ? !item.gradOnly : level === "grad" ? item.gradOnly : item.type === level));
+}
+
+// the hiring systems employers post their own openings on
+const HIRING_SYSTEM = /(^|\.)(greenhouse\.io|lever\.co|ashbyhq\.com|myworkdayjobs\.com|myworkdaysite\.com|smartrecruiters\.com|icims\.com|jobvite\.com|workable\.com|taleo\.net|oraclecloud\.com|successfactors\.com|successfactors\.eu|bamboohr\.com|rippling\.com|paylocity\.com|ultipro\.com|dayforcehcm\.com|adp\.com)$/i;
+
+const EMPLOYER_BOARDS = new Set(["Greenhouse", "Lever", "Ashby", "Workday", "SmartRecruiters"]);
+
+/** Posted by the employer itself (its hiring system or its own website), by a company found in the company records. */
+export function isVerified(item: Internship): boolean {
+  if (item.employees === undefined && item.band === undefined) return false;
+  if (EMPLOYER_BOARDS.has(item.source)) return true;
+  try {
+    const host = new URL(item.url).hostname.toLowerCase();
+    const name = item.company.toLowerCase().split(/\s+/)[0].replace(/[^a-z0-9]/g, "");
+    return HIRING_SYSTEM.test(host) || (name.length >= 4 && host.includes(name));
+  } catch {
+    return false;
+  }
+}
+
+const GRAD_WORDS = String.raw`(?:(?:new|university|college|ph\.?d\.?(?:\/abd)?|mba|masters?)\s+)*(?:grads?|graduates?|graduation)\b(?!\s+(?:intern|co-?op|fellow|associate|student|research|program|assistant))`;
+const GRAD_YEAR = [
+  /\bclass of\s+(20\d\d)\b/gi,
+  new RegExp(String.raw`\b(20\d\d)\s+${GRAD_WORDS}`, "gi"),
+  /\b(?:new grad\w*|graduat(?:ion|ing))\s+(?:in\s+)?(?:[a-z]+\s+)?(20\d\d)\b/gi,
+];
+
+/** The graduation years a title names: "Class of 2028", "May 2027 Grad", "2026 New College Graduate". */
+export function graduationYears(title: string): number[] {
+  return [...new Set(GRAD_YEAR.flatMap((pattern) => [...title.matchAll(pattern)].map((m) => Number(m[1]))))];
+}
+
+const TERM_STARTS: Record<string, number> = { Spring: 1, Summer: 6, Fall: 9, Winter: 12 };
+
+/**
+ * Whether a listing can fit someone graduating then ("2027-05"). Few listings say who they're for, so this removes the
+ * ones that rule the student out: another class year in the title, or an internship that only starts after they've left.
+ */
+export function fitsGraduation(item: Internship, grad: string): boolean {
+  const [year, month] = grad.split("-").map(Number);
+  const named = graduationYears(item.title);
+  if (named.length) return named.includes(year);
+  if (kindOf(item) !== "internship") return true;
+  const starts = item.terms.map((term) => term.split(" ")).filter(([season, y]) => TERM_STARTS[season] !== undefined && /^\d{4}$/.test(y ?? ""));
+  return starts.length === 0 || starts.some(([season, y]) => Number(y) * 12 + TERM_STARTS[season] < year * 12 + month);
+}
+
+/** The next eight graduation dates, May and December. */
+export function graduationOptions(now: number): { value: string; label: string }[] {
+  const today = new Date(now * 1000);
+  const options: { value: string; label: string }[] = [];
+  for (let year = today.getUTCFullYear(); options.length < 8; year++) {
+    for (const [month, name] of [[5, "May"], [12, "December"]] as const) {
+      if (options.length < 8 && year * 12 + month >= today.getUTCFullYear() * 12 + today.getUTCMonth() + 1) options.push({ value: `${year}-${String(month).padStart(2, "0")}`, label: `${name} ${year}` });
+    }
+  }
+  return options;
 }
 
 // the bands of the company dataset (BANDS in normalize.mjs), in the same order
@@ -98,17 +176,6 @@ export function termsIn(items: Internship[]): string[] {
 
 const has = (text: string, part: string) => text.toLowerCase().includes(part.trim().toLowerCase());
 
-const STATES: Record<string, string> = {
-  AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California", CO: "Colorado", CT: "Connecticut",
-  DE: "Delaware", DC: "District of Columbia", FL: "Florida", GA: "Georgia", HI: "Hawaii", ID: "Idaho", IL: "Illinois",
-  IN: "Indiana", IA: "Iowa", KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland",
-  MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi", MO: "Missouri", MT: "Montana",
-  NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey", NM: "New Mexico", NY: "New York",
-  NC: "North Carolina", ND: "North Dakota", OH: "Ohio", OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania",
-  RI: "Rhode Island", SC: "South Carolina", SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah",
-  VT: "Vermont", VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming",
-};
-
 // Sources write big cities differently ("LA", "Los Angeles", "NYC", "New York, NY"), so any of the names
 // finds all of them, with the cities around them. "LA" also means Louisiana, which stays included.
 const SF = "\\bSF\\b|San Francisco";
@@ -141,38 +208,50 @@ export function inPlace(location: string, query: string): boolean {
 
 export const isNew = (item: Internship, since: number | null) => since !== null && (item.added ?? 0) > since;
 
-export function matches(item: Internship, f: Filters, since: number | null = null): boolean {
+/** anyLevel is for Saved and Applied, which list everything marked, whatever its kind. */
+export function matches(item: Internship, f: Filters, since: number | null = null, anyLevel = false, within?: (place: string) => boolean): boolean {
   if (f.fresh && !isNew(item, since)) return false;
   const text = `${item.company} ${item.title}`;
   if (!f.query.trim().split(/\s+/).every((word) => has(text, word))) return false;
   // "LA" with "Remote" means jobs in LA or remote ones, since a remote job has no city to match
   if (f.location.trim() || f.remote) {
-    const nearby = f.location.trim() !== "" && item.locations.some((l) => inPlace(l, f.location));
+    const nearby = f.location.trim() !== "" && item.locations.some((l) => inPlace(l, f.location) || within?.(l));
     if (!nearby && !(f.remote && item.locations.some((l) => has(l, "remote")))) return false;
   }
-  const level = item.type ?? "internship";
-  if (f.level === "" ? level !== "internship" && level !== "entry" : f.level !== "all" && level !== f.level) return false;
-  if (f.size !== "" && !inSize(item, Number(f.size))) return false;
-  if (f.field && item.field !== f.field) return false;
-  if (f.term && !item.terms.includes(f.term)) return false;
-  if (f.undergrad && item.gradOnly) return false;
+  if (!anyLevel && !inLevel(item, f.kind, f.level)) return false;
+  if (f.size.length && !f.size.some((size) => inSize(item, Number(size)))) return false;
+  if (f.verified && !isVerified(item)) return false;
+  if (f.grad && !fitsGraduation(item, f.grad)) return false;
+  if (f.field.length && !f.field.includes(item.field)) return false;
+  if (f.term.length && !f.term.some((term) => item.terms.includes(term))) return false;
   if (f.sponsorship && item.sponsorship && item.sponsorship !== "offers") return false;
   if (f.permanent && item.sponsorship === "citizens") return false;
   return true;
 }
 
+/** The kind and level a link asks for: ?kind=jobs, ?level=mid. Links from before the two lists say level=all or internship. */
+function kindAndLevel(kind: string | null, level: string | null): Partial<Filters> {
+  for (const k of ["internship", "job"] as const) {
+    const found = LEVELS[k].find((l) => l.id === level);
+    if (found) return { kind: k, level: [found.id] };
+  }
+  if (kind === "jobs" || kind === "job" || level === "all") return { kind: "job" };
+  return {};
+}
+
 /** A search passed in the address, as links from the Planner do: ?q=security&field=Software&location=LA */
 export function filtersFromUrl(search: string, items: Internship[]): Partial<Filters> {
   const params = new URLSearchParams(search);
-  const field = params.get("field");
-  const level = params.get("level");
+  const field = params.getAll("field").filter((name) => items.some((item) => item.field === name));
   return {
-    ...(LEVELS.some((l) => l.id === level) && { level: level as Filters["level"] }),
+    ...kindAndLevel(params.get("kind"), params.get("level")),
     ...(params.get("q") && { query: params.get("q")! }),
     ...(params.get("location") && { location: params.get("location")! }),
-    ...(field && items.some((item) => item.field === field) && { field }),
+    ...(field.length > 0 && { field }),
   };
 }
+
+const isWhole = (item: Internship) => typeof item.title === "string" && typeof item.company === "string" && Array.isArray(item.locations) && Array.isArray(item.terms);
 
 /** What a browser saved. Anything damaged is dropped, and entries from before listings were copied get their copy. */
 export function readTracked(saved: unknown, items: Internship[]): Tracked {
@@ -182,7 +261,7 @@ export function readTracked(saved: unknown, items: Internship[]): Tracked {
     if (value === "saved" || value === "applied") {
       const item = items.find((i) => i.id === key);
       if (item) tracked[item.url] = { status: value, item };
-    } else if ((value?.status === "saved" || value?.status === "applied") && value.item?.url === key) {
+    } else if ((value?.status === "saved" || value?.status === "applied") && value.item?.url === key && isWhole(value.item)) {
       // a listing's link can change, so use the current copy when it's still here
       const current = items.find((i) => i.url === key || i.id === value.item.id) ?? value.item;
       tracked[current.url] = { status: value.status, item: current };
@@ -197,19 +276,31 @@ export function readTracked(saved: unknown, items: Internship[]): Tracked {
  * opens themselves.
  */
 export function searchElsewhere(f: Filters): { name: string; url: string }[] {
-  const keywords = f.query.trim() || f.field;
-  const kind = { "": "internship", internship: "internship", entry: "entry level", mid: "", senior: "senior", all: "" }[f.level];
+  // these sites take one search, so several fields can't be asked for at once
+  const keywords = f.query.trim() || (f.field.length === 1 ? f.field[0] : "");
+  const all = f.kind === "internship" ? { word: "internship", linkedin: "1" } : { word: "", linkedin: "2,3,4,5" };
   // LinkedIn's experience levels: 1 internship, 2 entry level, 3 associate, 4 mid-senior, 5 director
-  const levels = { "": "1,2", internship: "1", entry: "2", mid: "3,4", senior: "4,5", all: "" }[f.level];
-  const words = `${keywords} ${kind}`.trim();
+  const sites: Record<LevelChoice, { word: string; linkedin: string }> = {
+    undergrad: { word: "undergraduate internship", linkedin: "1" },
+    grad: { word: "graduate internship", linkedin: "1" },
+    entry: { word: "entry level", linkedin: "2" },
+    mid: { word: "", linkedin: "3,4" },
+    senior: { word: "senior", linkedin: "4,5" },
+  };
+  const picks = f.level.map((level) => sites[level]);
+  const word = picks.length === 1 ? picks[0].word : all.word;
+  const levels = picks.length ? [...new Set(picks.flatMap((p) => p.linkedin.split(",")))].sort().join(",") : all.linkedin;
+  const miles = f.location.trim() ? Math.min(Number(f.miles) || 0, 100) : 0;  // neither site looks further than 100
+  const words = `${keywords} ${word}`.trim();
   const place = f.location.trim() || "United States";
   const linkedin = new URLSearchParams({ keywords: words || "jobs", location: place });
-  if (levels) linkedin.set("f_E", levels);
+  linkedin.set("f_E", levels);
+  if (miles) linkedin.set("distance", String(miles));
   if (f.remote) linkedin.set("f_WT", "2");  // f_WT=2: remote
   return [
     { name: "Handshake", url: `https://app.joinhandshake.com/stu/postings?${new URLSearchParams({ query: words })}` },
     { name: "LinkedIn", url: `https://www.linkedin.com/jobs/search/?${linkedin}` },
-    { name: "Indeed", url: `https://www.indeed.com/jobs?${new URLSearchParams({ q: words, l: f.remote && !f.location.trim() ? "Remote" : place })}` },
+    { name: "Indeed", url: `https://www.indeed.com/jobs?${new URLSearchParams({ q: words, l: f.remote && !f.location.trim() ? "Remote" : place, ...(miles && { radius: String(miles) }) })}` },
     { name: "Simplify", url: `https://simplify.jobs/jobs?${new URLSearchParams({ q: words })}` },
   ];
 }
